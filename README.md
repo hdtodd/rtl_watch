@@ -1,6 +1,6 @@
 # rtl_watch
 
-##Live monitor of rtl_433 for devices broadcasting on the ISM band (433MHz in the US) in your neighborhood
+## Live monitor of rtl_433 for devices broadcasting on the ISM band (433MHz in the US) in your neighborhood
 
 ## Use
 
@@ -12,7 +12,7 @@ The program opens a display window in which builds the table of seen devices dyn
 
 `rtl_watch` is a Python3 program.  It requires that the Python packages `tkinter` and `pah-mqtt` be installed on the computer on which `rtl_watch` is invoked.
 
-`rtl_watch` has been tested on Mac OSX Catalina and Raspbian Bullseye. On Mac OSX, you may need to install Python3 if you haven't already done so.
+`rtl_watch` has been tested on Mac OSX Catalina and Raspbian Bullseye. On Mac OSX, you may need to install Python3 if you haven't already done so https://www.python.org/downloads/macos/.
 
 
 ## Author

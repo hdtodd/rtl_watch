@@ -99,15 +99,19 @@ def printsum():
     global devices
     global dedups, totrecs
     mqtt.loop_stop()
-    mqtt.disconnect()
-    print("\n\nrtl_watch: Printing summary")
-    print("First entry recorded at: ", earliest_time.get())
-    print("Last entry recorded at:  ", last_time.get()) 
+    print("\n____________________________________________________________________")
+    print("\n\nrtl_watch: Printing summary of recorded rtl_433 packets\n")
+    print("First entry recorded at: ", earliest_time.get(),
+          "\nLast entry recorded at:  ", last_time.get()) 
     print("Processed ", dedups, " de-duplicated records of a total of ", totrecs, " records")
+    print("\n{:<25} {:>8} {:>8} ±{:>5} {:>8} {:>8}".format(
+          "Device", "Rec Cnt", "Mean", "𝜎  ", "Min", "Max"))
     for device in sorted(devices):
         (n,avg,std,min,max) = devices[device].get()
         print("{:<25} {:>8} {:>8.1f} ±{:>5.2f} {:>8.1f} {:>8.1f}".format(device,n,avg,std,min,max))
-    quit()
+    print("\n____________________________________________________________________")
+    mqtt.loop_start()
+#    quit()
 
 ###############################################################################
 # MQTT functions and display updating

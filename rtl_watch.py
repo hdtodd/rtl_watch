@@ -6,6 +6,8 @@ import time
 import getopt, sys
 from paho.mqtt import client as mqtt_client
 from datetime import datetime
+import class_stats as stats
+
 #Device                      #Recs  Mean SNR ± 𝜎    Min    Max
 
 ###############################################################################
@@ -94,8 +96,18 @@ def stop(event=None):
     win.quit()
 
 def printsum():
-    print("Printing summary")
-    return
+    global devices
+    global dedups, totrecs
+    mqtt.loop_stop()
+    mqtt.disconnect()
+    print("\n\nrtl_watch: Printing summary")
+    print("First entry recorded at: ", earliest_time.get())
+    print("Last entry recorded at:  ", last_time.get()) 
+    print("Processed ", dedups, " de-duplicated records of a total of ", totrecs, " records")
+    for device in sorted(devices):
+        (n,avg,std,min,max) = devices[device].get()
+        print("{:<25} {:>8} {:>8.1f} ±{:>5.2f} {:>8.1f} {:>8.1f}".format(device,n,avg,std,min,max))
+    quit()
 
 ###############################################################################
 # MQTT functions and display updating
@@ -122,31 +134,36 @@ def subscribe(mqtt: mqtt_client):
     # on_message does the real work
     # When we get a record, ignore if it's a duplicate, update display if it isn't
     def on_message(mqtt, userdata, msg):
-        global first_rec
+        global first_rec, last_rec
+        global devices
+        global dedups, totrecs
 
-
+        # count this new record
+        totrecs += 1
         # parse the json payload
         y = json.loads(msg.payload.decode())
         # Get time in seconds since Epoch for comparison purposes, with 2 sec threshhold
         eTime = time.mktime(time.strptime(y["time"], "%Y-%m-%d %H:%M:%S"))
         # Is this a duplicate record?  Use time+model+id as a fingerprint to tell.
         # If not a duplicate entry, then process & record; else skip
-        if eTime>lastEntry["time"]+thresh:
-            device = y["model"]+" "+ str(y["id"])
-#            loc  = device if not (device in devices) else location[device]
-#            drow = -1 if not (device in location) else list(location).index(device)
+        device = y["model"]+" "+ str(y["id"])
+        if eTime>lastEntry["time"]+thresh and device != lastEntry["device"]:
+            dedups += 1
             drow = -1
-            print("{:<3d} {:<20} {:<20} snr={:>3.0f}".format(
-                drow,
-                device,
-                y["time"],
-                0.0 if not ('snr' in y) else y['snr'])
-                )
+            snr = 0.0 if not ('snr' in y) else float(y['snr'])
+            print("{:<25} {:<20} snr={:>4.1f}".format(
+                device, y["time"], snr) )
 
             if first_rec:
                 earliest_time.set( y["time"])
                 first_rec = False
             last_time.set(y["time"])
+
+            if device in devices:
+                devices[device].append(snr)
+            else:
+                devices[device] = stats.stats(snr)
+                
             
             # Update labels to device data
 #            if drow in range(displaySize):
@@ -201,6 +218,9 @@ def add_row(rownum, device, reccnt, snr, stdev, min, max):
 
 getarg()
 
+devices = {}
+totrecs = 0
+dedups  = 0
 t = datetime.now()
 win = tk.Tk()
 hfont = tkf.Font(size=40)
@@ -213,7 +233,7 @@ frm_title = tk.Frame(win, borderwidth=10, relief="groove")
 frm_title.pack(side="top", fill="x", expand=True)
 lbl_title  = tk.Label(frm_title, text="rtl_watch: monitor devices broadcasting over ISM bands using rtl_433",
                       font=hfont, bg="medium sea green", fg="white")
-lbl_title.pack(anchor="center", fill="x", padx=5, pady=5)
+lbl_title.pack(anchor="center", fill="x", padx=10, pady=10)
 
 # Build the button menu
 frm_toolbar = tk.Frame(win)
@@ -265,7 +285,6 @@ for i in range (6):
                      "%s" % 9.9, "%s" % 25.0)
     tblrow.append(row)
     row.pack(side="top")
-
 
 mqtt = connect_mqtt()
 mqtt.loop_start()

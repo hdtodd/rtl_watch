@@ -1,6 +1,10 @@
-# rtl_watch: rtl_433 monitor
+# rtl\_watch: rtl\_433 monitor
 
 ### Live monitor of rtl_433 for devices broadcasting on the ISM band (433MHz in the US) in your neighborhood
+
+## Purpose
+
+`rtl_watch` can help you understand the ISM environment in your neighborhood.  It catalogs devices near you that are broadcasting on the ISM band (433MHz in the US).  The values provided by `rtl_watch` for the mean signal-to-noise ratio and its standard deviation over a number of readings may help you identify devices that are close to your location and/or new devices in your neighborhood.  Devices with higher SNR and lower standard deviations are likely to be nearer to you.
 
 ## Use
 

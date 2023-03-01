@@ -141,7 +141,8 @@ def subscribe(mqtt: mqtt_client):
         global first_rec, last_rec
         global devices
         global dedups, totrecs
-
+        global tbl, devnum
+        
         # count this new record
         totrecs += 1
         # parse the json payload
@@ -164,22 +165,38 @@ def subscribe(mqtt: mqtt_client):
             last_time.set(y["time"])
 
             if device in devices:
+                # We've seen this device, so just update the values
+                #   in the data table and in the display table
                 devices[device].append(snr)
+                (cnt,snr,sigma,min,max) = devices[device].get()
+                for i in range (devnum):
+                    if tbl[i][0].get()==device:
+                        tbl[i][1].set(cnt)
+                        tbl[i][2].set(round(snr,1))
+                        tbl[i][3].set(round(sigma,2))
+                        tbl[i][4].set(round(min,1))
+                        tbl[i][5].set(round(max,1))
+                        
             else:
+                # This is a new device: 1) create a table entry for it;
+                #   2) create a display table row for it
+                #   3) connect the display variables to the table
+                #   4) assign the values to the display
+                devnum += 1
+                tbl.append( (tk.StringVar(), tk.StringVar(), tk.StringVar(),
+                             tk.StringVar(), tk.StringVar(), tk.StringVar() ) )
+                row = add_row(devnum, tbl[devnum][0], tbl[devnum][1], tbl[devnum][2],
+                              tbl[devnum][3], tbl[devnum][4], tbl[devnum][5])
                 devices[device] = stats.stats(snr)
+                (cnt,snr,sigma,min,max) = devices[device].get()
+                tbl[devnum][0].set(device)
+                tbl[devnum][1].set(cnt)
+                tbl[devnum][2].set(round(snr,1))
+                tbl[devnum][3].set(round(sigma,2))
+                tbl[devnum][4].set(round(min,1))
+                tbl[devnum][5].set(round(max,1))
+                row.pack(side="top")
                 
-            
-            # Update labels to device data
-#            if drow in range(displaySize):
-#                try:
-#                    locs[drow].set(loc)
-#                    temp[drow].set(round(ltemp,1))
-#                    rh[drow].set(hum)
-#                except:
-#                    print("exception when trying to set display values")
-#                    pass
-#            resize()
-            # Now note this entry's fingerprint for subsequent de-duping
             lastEntry["time"] = eTime
             lastEntry["device"] = device
             
@@ -199,21 +216,21 @@ def quit_prog(event=None):
 #######################################################################################
 # Table management and display
 
-def add_row(rownum, device, reccnt, snr, stdev, min, max):
+def add_row(devnum, device, reccnt, snr, stdev, min, max):
     row = tk.Frame(frm_table)
     tblrow.append(row)
-    lbl_device = tk.Label(row, width=25, text=device, font=dfont)
-    lbl_reccnt = tk.Label(row, width=10, text=reccnt, font=dfont)
-    lbl_snr    = tk.Label(row, width=10, text=snr,    font=dfont)
-    lbl_stdev  = tk.Label(row, width=10, text=stdev,  font=dfont)
-    lbl_min    = tk.Label(row, width=10, text=min,    font=dfont)
-    lbl_max    = tk.Label(row, width=10, text=max,    font=dfont)
-    lbl_device.grid(row=rownum, column=0, padx=5, pady=6, sticky="W")
-    lbl_reccnt.grid(row=rownum, column=1, padx=5, pady=6, sticky="W")
-    lbl_snr.grid(   row=rownum, column=2, padx=5, pady=6, sticky="W")
-    lbl_stdev.grid( row=rownum, column=3, padx=5, pady=6, sticky="W")
-    lbl_min.grid(   row=rownum, column=4, padx=5, pady=6, sticky="W")
-    lbl_max.grid(   row=rownum, column=5, padx=5, pady=6, sticky="W")
+    lbl_device = tk.Label(row, width=25, textvariable=device, font=dfont)
+    lbl_reccnt = tk.Label(row, width=10, textvariable=reccnt, font=dfont)
+    lbl_snr    = tk.Label(row, width=10, textvariable=snr,    font=dfont)
+    lbl_stdev  = tk.Label(row, width=10, textvariable=stdev,  font=dfont)
+    lbl_min    = tk.Label(row, width=10, textvariable=min,    font=dfont)
+    lbl_max    = tk.Label(row, width=10, textvariable=max,    font=dfont)
+    lbl_device.grid(row=devnum, column=0, padx=5, pady=6, sticky="W")
+    lbl_reccnt.grid(row=devnum, column=1, padx=5, pady=6, sticky="W")
+    lbl_snr.grid(   row=devnum, column=2, padx=5, pady=6, sticky="W")
+    lbl_stdev.grid( row=devnum, column=3, padx=5, pady=6, sticky="W")
+    lbl_min.grid(   row=devnum, column=4, padx=5, pady=6, sticky="W")
+    lbl_max.grid(   row=devnum, column=5, padx=5, pady=6, sticky="W")
     return row
 
 
@@ -225,6 +242,7 @@ getarg()
 devices = {}
 totrecs = 0
 dedups  = 0
+devnum = 0
 t = datetime.now()
 win = tk.Tk()
 hfont = tkf.Font(size=40)
@@ -274,21 +292,23 @@ lbl_ftime = tk.Label(frm_info, textvariable=earliest_time, font=dfont)
 lbl_ftime.pack(side="left", padx=5, pady=5)
 
 # Build the table, column header first
-tblrow = []
-rowcnt = 0
 frm_table = tk.Frame(win, borderwidth=5, relief="groove")
 frm_table.pack(side="top", fill="both", expand=True, padx=5, pady=5)
+tblrow = []
+tbl = []
+devnum = 0
+tbl.append( (tk.StringVar(), tk.StringVar(), tk.StringVar(),
+               tk.StringVar(), tk.StringVar(), tk.StringVar() ) )
+row = add_row(devnum, tbl[devnum][0], tbl[devnum][1], tbl[devnum][2], tbl[devnum][3], tbl[devnum][4], tbl[devnum][5])
+tbl[devnum][0].set("Device model+id")
+tbl[devnum][1].set("Record\nCount")
+tbl[devnum][2].set("SNR")
+tbl[devnum][3].set("SNR\nStd Dev")
+tbl[devnum][4].set("SNR Min")
+tbl[devnum][5].set("SNR Max")
 
-row = add_row(rowcnt,"Device model+id", "Record\nCount", "SNR",
-               "SNR\nStd Dev", "SNR Min", "SNR Max")
 tblrow.append(row)
 row.pack(side="top")
-
-for i in range (6):
-    row = add_row(++rowcnt, "Device %s" %i, "%s" % 12345, "%s" % 19.4, "%s" % 3.5,
-                     "%s" % 9.9, "%s" % 25.0)
-    tblrow.append(row)
-    row.pack(side="top")
 
 mqtt = connect_mqtt()
 mqtt.loop_start()

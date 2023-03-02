@@ -151,7 +151,11 @@ def subscribe(mqtt: mqtt_client):
         eTime = time.mktime(time.strptime(y["time"], "%Y-%m-%d %H:%M:%S"))
         # Is this a duplicate record?  Use time+model+id as a fingerprint to tell.
         # If not a duplicate entry, then process & record; else skip
-        device = y["model"]+" "+ str(y["id"])
+        # Some records don't have an "id" field, so just use "model" in those cases
+        if "id" in y:
+             device = y["model"]+" "+ str(y["id"])
+        else:
+             device = y["model"]
         if eTime>lastEntry["time"]+thresh and device != lastEntry["device"]:
             dedups += 1
             drow = -1
@@ -219,12 +223,13 @@ def quit_prog(event=None):
 def add_row(devnum, device, reccnt, snr, stdev, min, max):
     row = tk.Frame(frm_table)
     tblrow.append(row)
-    lbl_device = tk.Label(row, width=25, textvariable=device, font=dfont)
-    lbl_reccnt = tk.Label(row, width=10, textvariable=reccnt, font=dfont)
-    lbl_snr    = tk.Label(row, width=10, textvariable=snr,    font=dfont)
-    lbl_stdev  = tk.Label(row, width=10, textvariable=stdev,  font=dfont)
-    lbl_min    = tk.Label(row, width=10, textvariable=min,    font=dfont)
-    lbl_max    = tk.Label(row, width=10, textvariable=max,    font=dfont)
+    bg = "skyblue2" if devnum==0 else "white"
+    lbl_device = tk.Label(row, width=25, textvariable=device, font=dfont, bg=bg)
+    lbl_reccnt = tk.Label(row, width=10, textvariable=reccnt, font=dfont, bg=bg)
+    lbl_snr    = tk.Label(row, width=10, textvariable=snr,    font=dfont, bg=bg)
+    lbl_stdev  = tk.Label(row, width=10, textvariable=stdev,  font=dfont, bg=bg)
+    lbl_min    = tk.Label(row, width=10, textvariable=min,    font=dfont, bg=bg)
+    lbl_max    = tk.Label(row, width=10, textvariable=max,    font=dfont, bg=bg)
     lbl_device.grid(row=devnum, column=0, padx=5, pady=6, sticky="W")
     lbl_reccnt.grid(row=devnum, column=1, padx=5, pady=6, sticky="W")
     lbl_snr.grid(   row=devnum, column=2, padx=5, pady=6, sticky="W")

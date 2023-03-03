@@ -1,6 +1,6 @@
 # rtl\_watch: rtl\_433 monitor
 
-### Live monitor of rtl_433 for devices broadcasting on the ISM band (433MHz in the US) in your neighborhood
+### Real-time monitor of rtl_433 for ISM devices
 
 ## Purpose
 
@@ -10,21 +10,23 @@
 
 These use instructions presume that you already have `rtl_433` in operation on your local-area network and that it publishes ISM-device packet information via `mqtt`.  Instructions for setting that up are included below if you aren't already running `rtl_433`.
 
-To start the monitoring process, issue the command `python3 rtl_watch.py`.
+To start the monitoring process, issue the command `python3 rtl_watch.py` after first editing the hostname of your `rtl_433` system in that Python program.
 
-The program opens a display window in which it builds dynamically the table of devices recognized by `rtl_433` and for each device: the number of records received, the mean signal-to-noise rato (SNR) of those packets, the standard deviation of the SNR values, and the minimum and maximum values of SNR seen.  
+The program opens a display window in which it builds dynamically the table of devices recognized by `rtl_433` and for each device displays the device name (+ id if that field is present in the packet), number of de-duplicated packets received, and the signal-to-noise rato (SNR) mean,  standard deviation, minimum, and maximum values of those packets.  
 
-Press the `print` button to see a summary of packets observed.  
+Press one of the sort buttons (device name, number of records seen, or mean SNR) to sort the display in alphabetical order of model(+id), decreasing order of number of de-duplicated packets seen, or decreasing order of mean SNR.
+
+Press the `print` button to see a summary of packets observed (printed in alphabetical order of device name + id).
+
+The sort and print functions suspend briefly the processing of any incoming packets, so a small number of packets might be missed as those functions are performed.
 
 Data collection continues until you press the `Quit` button.
-
-`sort` buttons are not yet functional.
 
 ## Installing `rtl_watch`
 
 `rtl_watch` is a Python3 program.  It requires that the Python packages `tkinter` and `paho-mqtt` be installed on the computer on which `rtl_watch` is invoked.  `rtl_watch` has been tested on Mac OSX Catalina and Raspbian Bullseye. On Mac OSX, you may need to install Python3 if you haven't already done so ( https://www.python.org/downloads/macos/ ).
 
-To install `rtl_watch`, edit the template file to replace the placeholder "<mymonitor>" with the name of the `rtl_433` host on your local area network (which could be the same computer as `rtl_watch` is installed on):  `sed s/\<mymonitor\>/xxxx/rtl_watch.py.template > rtl_watch.py`, where "xxx" is the hostname of that `rtl_433` system.  
+To install `rtl_watch`, edit the file `rtl_watch.py`to replace the placeholder "<mymonitor>" with the name of the `rtl_433` host on your local area network (which could be the same computer as `rtl_watch` is installed on). 
 
 `rtl_watch` requires a class library, `class-stats.py`, which is included in the distribution package.
 
@@ -47,10 +49,12 @@ Perform these steps on the computer you intend to use to monitor the ISM-band ra
      * Under `## Data output options`/`# as command line option:` add `output mqtt` and `output json:/var/log/rtl_433/rtl_433.json`.  The former has the program publish received packets via `mqtt` and the latter logs received packets to a log file in case you want to do subsequent analysis of devices in your neighborhood.  More options for `mqtt` publishing service are available, but this will get you started.
      *Create the directory for that log file: `sudo mkdir /var/log/rtl_433`
 1. **PRODUCTION TEST** Now `sudo /usr/local/bin/rtl_433` from the command line of one terminal screen on the monitoring computer.  From the command line of another terminal screen on that computer, or from another computer with mosquitto client installed, type `mosquitto_sub -h <monitorhost> -t "rtl_433/<monitorhost>/events"`, where you substitute your monitoring computer's hostname for "\<monitorhost>".  If you have ISM-band traffic in your neighborhood, and if you've tuned `rtl_433` to the correct frequency, you should be seeing the JSON-format records of packets received by the RTL\_SDR dongle.  If you don't, first verify that you can publish to `mosquitto` on that monitoring computer and receive via a client (use the native `mosquitto_pub` and `mosquitto_sub` commands).  If `mosquitto` is functioning correctly, check that the rtl\_433 configuration file specifies mqtt output correctly.
-1. Finally, install the rtl_433 monitor as a service:
-        * `sudo cp rtl_433.service /etc/systemd/system/` to copy the .service file from this download directory (where this README file is located) into the systemd directory
-        * `sudo systemctl enable rtl_433` and `sudo systemctl start rtl_433` to enable and start the service
-        * Now, whenever the monitoring system is rebooted, it will restart the rtl_433 service and the mqtt service needed to broadcast in JSON format the information received by the RTL\_433 dongle as ISM packets.
+1. Finally, install the `rtl_433` monitor as a service:
+
+        * `sudo cp rtl_433.service /etc/systemd/system/`
+        * `sudo systemctl enable rtl_433`
+        * `sudo systemctl start rtl_433`
+       Now, whenever the monitoring system is rebooted, it will restart the rtl_433 service and the mqtt service needed to broadcast in JSON format the information received by the RTL\_433 dongle as ISM packets.
 
 ## Author
 

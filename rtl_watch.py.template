@@ -43,9 +43,9 @@ import class_stats as stats
 
 # MQTT connection parameters
 # Parameters used to establish the mqtt connection to the rtl_433 receiver mqtt publisher
-broker = 'pi-1'
+broker = '<mymonitor>'
 port = 1883
-topic = "rtl_433/pi-1/events"
+topic = "rtl_433/<mymonitor>/events"
 # If your mqtt broker is secured, provide login info
 # generate client ID with pub prefix randomly
 client_id = f'python-mqtt-{random.randint(0, 100)}'

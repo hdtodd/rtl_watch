@@ -1,3 +1,33 @@
+#! /usr/bin/python3 rtl_watch.py
+#  Python program for real-time monitoring of ISM packets.
+#
+#  Uses an ISM-band monitoring computer that runs rtl_433 to
+#  collect and analyze ISM-band (433MHz in the US) packet
+#  broadcast by remote-sensing devices and received at the
+#  monitoring computer via RTL_SDR dongle.
+#  rtl_433 on the monitoring computer analyzes radio packets
+#  and broadcasts the information about recognized packets via
+#  mqtt broker.
+#
+#  rtl_watch subscribes to that published mqtt stream to
+#  record, count, and analyze signal strength of packets
+#  received by that RTL_SDR dongle.  rtl_watch can run on
+#  the monitoring computer or any number of other computers
+#  on the LAN to which the monitoring computer is connected.
+#
+#  Devices and analyzed data are displayed in real time in
+#  a window on the computer running rtl_watch.
+#  Analyzed data includes
+#     Device Name, # of records seen,
+#        and signal-to-noise ratio mean, standard deviation,
+#        min, and max
+#  The data are updated dynamically, as the packets are seen.
+#
+#  At any time, user can print a summary of devices seen
+#  to date, and then analysis continues.
+#
+#  Written by H. David Todd, hdtodd@gmail.com, 2023.03.02
+
 import tkinter as tk
 import tkinter.font as tkf
 import random
@@ -7,8 +37,6 @@ import getopt, sys
 from paho.mqtt import client as mqtt_client
 from datetime import datetime
 import class_stats as stats
-
-#Device                      #Recs  Mean SNR ± 𝜎    Min    Max
 
 ###############################################################################
 ##  *** BEGIN LOCAL MODIFICATIONS ***
@@ -43,9 +71,8 @@ first_rec = True
 # Command line processor: options are [<none> | -h | -f | -c]
 def getarg():
 
-    global useF
-    options = "hcf"
-    long_options = ["Help", "Celsius", "Fahrenheit"]
+    options = "hxy"
+    long_options = ["Help", "X", "Y"]
 
     def helper():
         print("rtl_watch: program to monitor devices observed by rtl_433")
@@ -53,8 +80,8 @@ def getarg():
         print("           Reports devices, number of records received from device,")
         print("             and signal-to-noise mean, std deviation, min, & max.")
         print("rtl_watch -h for this help message")
-        print("rtl_watch -f (placeholder for future)")
-        print("rtl_watch -c (placeholder for future)")
+        print("rtl_watch -x (placeholder for future)")
+        print("rtl_watch -y (placeholder for future)")
 
     # Remove program name from the list of command line arguments
     argumentList = sys.argv[1:]
@@ -69,10 +96,10 @@ def getarg():
             if currentArgument in ("-h", "-H", "--Help"):
                 helper()
                 quit()
-            elif currentArgument in ("-c", "--Celsius"):
-                useF=False
-            elif currentArgument in ("-f", "--Fahrenheit"):
-                useF=True
+            elif currentArgument in ("-x", "--X"):
+                print("Option ", currentArgument, " not assigned")
+            elif currentArgument in ("-y", "--Y"):
+                print("Option ", currentArgument, " not assigned")
 
     except getopt.error as err:
         # output error msg, help, and quit
@@ -82,6 +109,20 @@ def getarg():
 
 # Button action routines
 def sortDevice():
+    mqtt.loop_stop()
+    row = 1
+    for	device in sorted(devices):
+        print("-> Moving ", device, " to row ", row)
+        (cnt,snr,sigma,min,max) = devices[device].get()
+        tbl[row][0].set(device)
+        tbl[row][1].set(cnt)
+        tbl[row][2].set(round(snr,1))
+        tbl[row][3].set(round(sigma,2))
+        tbl[row][4].set(round(min,1))
+        tbl[row][5].set(round(max,1))
+        row += 1
+
+    mqtt.loop_start()
     return
 
 def sortRecCnt():
@@ -173,7 +214,7 @@ def subscribe(mqtt: mqtt_client):
                 #   in the data table and in the display table
                 devices[device].append(snr)
                 (cnt,snr,sigma,min,max) = devices[device].get()
-                for i in range (devnum):
+                for i in range (1, devnum+1):
                     if tbl[i][0].get()==device:
                         tbl[i][1].set(cnt)
                         tbl[i][2].set(round(snr,1))
@@ -305,12 +346,12 @@ devnum = 0
 tbl.append( (tk.StringVar(), tk.StringVar(), tk.StringVar(),
                tk.StringVar(), tk.StringVar(), tk.StringVar() ) )
 row = add_row(devnum, tbl[devnum][0], tbl[devnum][1], tbl[devnum][2], tbl[devnum][3], tbl[devnum][4], tbl[devnum][5])
-tbl[devnum][0].set("Device model+id")
+tbl[devnum][0].set("Device\nmodel+id")
 tbl[devnum][1].set("Record\nCount")
-tbl[devnum][2].set("SNR")
+tbl[devnum][2].set("mean\nSNR")
 tbl[devnum][3].set("SNR\nStd Dev")
-tbl[devnum][4].set("SNR Min")
-tbl[devnum][5].set("SNR Max")
+tbl[devnum][4].set("Min\nSNR")
+tbl[devnum][5].set("Max\nSNR")
 
 tblrow.append(row)
 row.pack(side="top")

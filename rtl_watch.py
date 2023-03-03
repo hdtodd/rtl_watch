@@ -126,9 +126,51 @@ def sortDevice():
     return
 
 def sortRecCnt():
+    mqtt.loop_stop()
+    cntlist = {}
+    for device in devices:
+        print(device)
+        (cnt,snr,sigma,min,max) = devices[device].get()
+        key = f"{cnt:06}" + device
+        cntlist[key] = device
+    print(cntlist)
+    row = 1
+    for rec in sorted(cntlist, reverse=True):
+        print("-> Moving ", cntlist[rec], " to row ", row)
+        (cnt,snr,sigma,min,max) = devices[cntlist[rec]].get()
+        tbl[row][0].set(cntlist[rec])
+        tbl[row][1].set(cnt)
+        tbl[row][2].set(round(snr,1))
+        tbl[row][3].set(round(sigma,2))
+        tbl[row][4].set(round(min,1))
+        tbl[row][5].set(round(max,1))
+        row += 1
+
+    mqtt.loop_start()    
     return
 
 def sortSnr():
+    mqtt.loop_stop()
+    cntlist = {}
+    for device in devices:
+        print(device)
+        (cnt,snr,sigma,min,max) = devices[device].get()
+        key = f"{snr:05.1f}" + device
+        cntlist[key] = device
+    print(cntlist)
+    row = 1
+    for rec in sorted(cntlist, reverse=True):
+        print("-> Moving ", cntlist[rec], " to row ", row)
+        (cnt,snr,sigma,min,max) = devices[cntlist[rec]].get()
+        tbl[row][0].set(cntlist[rec])
+        tbl[row][1].set(cnt)
+        tbl[row][2].set(round(snr,1))
+        tbl[row][3].set(round(sigma,2))
+        tbl[row][4].set(round(min,1))
+        tbl[row][5].set(round(max,1))
+        row += 1
+
+    mqtt.loop_start()    
     return
 
 def stop(event=None):

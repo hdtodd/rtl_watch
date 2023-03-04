@@ -5,6 +5,7 @@
 ## Purpose
 
 `rtl_watch` can help you understand the ISM environment in your neighborhood.  It catalogs devices near you that are broadcasting on the ISM band (433MHz in the US).  The values provided by `rtl_watch` for the mean signal-to-noise ratio and its standard deviation over a number of readings may help you identify devices that are close to your location and/or new devices in your neighborhood.  Devices with higher SNR and lower standard deviations are likely to be nearer to you.
+![](https://github.com/hdtodd/rtl_watch/blob/main/rtl_watch.png)
 
 ## Use
 

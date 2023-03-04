@@ -21,7 +21,7 @@ Press the `print` button to see a summary of packets observed (printed in alphab
 
 The sort and print functions suspend briefly the processing of any incoming packets, so a small number of packets might be missed as those functions are performed.
 
-Data collection continues until you press the `Quit` button.
+Data collection continues until you press the `Stop` button.
 
 ## Installing `rtl_watch`
 
@@ -60,7 +60,7 @@ Perform these steps on the computer you intend to use to monitor the ISM-band ra
  
 ## Known Issues
 
-On occasion, pressing the Quit button in `rtl_watch`results in a hung application (at least on Mac OSX), requiring a forced-quit.  This appears to be related to the Python GIL issue and may disappear in future Python releases or on other systems.
+On occasion, pressing the Stop button in `rtl_watch` results in a hung application (at least on Mac OSX), requiring a forced-quit.  This appears to be related to the Python GIL issue and may disappear in future Python releases or on other systems.
        
 ## Related Tools
 These related `rtl_433` tools might also be helpful:

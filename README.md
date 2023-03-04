@@ -1,6 +1,6 @@
 # rtl\_watch: Real-time rtl\_433 monitor
 
-### Real-time monitor of rtl_433 for ISM devices
+### Catalog and characterize ISM devices using rtl\_433
 
 ## Purpose
 

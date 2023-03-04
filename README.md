@@ -59,7 +59,7 @@ Perform these steps on the computer you intend to use to monitor the ISM-band ra
  
 ## Known Issues
 
-On occasion, pressing the STOP button in `rtl_watch`results in a hung application (at least on Mac OSX), requiring a forced-quit.  This appears to be related to the Python GIL issue and may disappear in future Python releases or on other systems.
+On occasion, pressing the Quit button in `rtl_watch`results in a hung application (at least on Mac OSX), requiring a forced-quit.  This appears to be related to the Python GIL issue and may disappear in future Python releases or on other systems.
        
 ## Related Tools
 These related `rtl_433` tools might also be helpful:

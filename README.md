@@ -10,7 +10,7 @@
 
 These use instructions presume that you already have `rtl_433` in operation on your local-area network and that it publishes ISM-device packet information via `mqtt`.  Instructions for setting that up are included below if you aren't already running `rtl_433`.
 
-To start the monitoring process, issue the command `python3 rtl_watch.py` after first editing the hostname of your `rtl_433` system in that Python program.
+To start the monitoring process, issue the command `python3 rtl_watch.py` after first editing the hostname of your `rtl_433` system in that Python program to replace the string `"<mymonitor>"`.
 
 The program opens a display window in which it builds dynamically the table of devices recognized by `rtl_433` and for each device displays the device name (+ id if that field is present in the packet), number of de-duplicated packets received, and the signal-to-noise rato (SNR) mean,  standard deviation, minimum, and maximum values of those packets.  
 
@@ -26,18 +26,18 @@ Data collection continues until you press the `Quit` button.
 
 `rtl_watch` is a Python3 program.  It requires that the Python packages `tkinter` and `paho-mqtt` be installed on the computer on which `rtl_watch` is invoked.  `rtl_watch` has been tested on Mac OSX Catalina and Raspbian Bullseye. On Mac OSX, you may need to install Python3 if you haven't already done so ( https://www.python.org/downloads/macos/ ).
 
-To install `rtl_watch`, edit the file `rtl_watch.py`to replace the placeholder "<mymonitor>" with the name of the `rtl_433` host on your local area network (which could be the same computer as `rtl_watch` is installed on). 
+To install `rtl_watch`, edit the file `rtl_watch.py`to replace the placeholder "\<mymonitor\>" with the name of the `rtl_433` host on your local area network (which could be the same computer as `rtl_watch` is installed on). 
 
 `rtl_watch` requires a class library, `class-stats.py`, which is included in the distribution package.
 
 `rtl_watch` requires that a computer (the "monitoring computer") on your local-area network be running `rtl_433` and re-broadcasting the packets it recognizes via the `mqtt` protocol on the local-area network.  See instructions below if you do not have an `rtl_433` system set up or if it has not been set up to re-broadcast packets through the `mqtt` broker.
 
-## [If Needed] Installing The Monitoring Computer
+## [If Needed] Installing and Configuring The Monitoring Computer
 Perform these steps on the computer you intend to use to monitor the ISM-band radio signals.
 
 1. If you don't already have one, purchase an RTL-SDR receiver.  Use your favorite search engine to search for "rtl sdr receiver".  They cost about $30US.  But be sure to get one with an antenna appropriate for your region's ISM frequency band.  Then you simply plug it in to a USB port on your monitoring computer.
 1. If you're not sure of the frequency of ISM bands in use in your location, use a tool such as `CubicSDR` (https://cubicsdr.com/) to observe the various ISM bands and discover which ones have activity in your region.  Set the frequency in `rtl_433` (below) accordingly.
-1. Install mosquitto: `sudo apt-get install mosquitto mosquitto-client`.  The broker will be started by `systemd` and will be restarted whenever the system is rebooted.
+1. Install mosquitto.  On Raspbian, for example, `sudo apt-get install mosquitto mosquitto-client`.  The broker will be started by `systemd` and will be restarted whenever the system is rebooted.
 1. Connect to a download directory on your monitoring computer and use `git` to install `rtl_433`: `git clone https://github.com/merbanan/rtl_433`.
 1. Connect to the installed rtl\_433 directory and follow the instructions in `./docs/BUILDING.md`to build and install the rtl\_433 program. **Be sure to install the prerequisite programs needed by rtl_433 before starting `cmake`.**  
 1. **INITIAL TEST** Following the build and install, you can simply invoke `sudo /usr/local/bin/rtl_433` to verify that it starts up, finds the RTL_SDR dongle, and identifies ISM packets.  You may need to adjust the frequency via command line, e.g.,  `-f 315M`, if you're not in the US.
@@ -51,14 +51,22 @@ Perform these steps on the computer you intend to use to monitor the ISM-band ra
 1. **PRODUCTION TEST** Now `sudo /usr/local/bin/rtl_433` from the command line of one terminal screen on the monitoring computer.  From the command line of another terminal screen on that computer, or from another computer with mosquitto client installed, type `mosquitto_sub -h <monitorhost> -t "rtl_433/<monitorhost>/events"`, where you substitute your monitoring computer's hostname for "\<monitorhost>".  If you have ISM-band traffic in your neighborhood, and if you've tuned `rtl_433` to the correct frequency, you should be seeing the JSON-format records of packets received by the RTL\_SDR dongle.  If you don't, first verify that you can publish to `mosquitto` on that monitoring computer and receive via a client (use the native `mosquitto_pub` and `mosquitto_sub` commands).  If `mosquitto` is functioning correctly, check that the rtl\_433 configuration file specifies mqtt output correctly.
 1. Finally, install the `rtl_433` monitor as a service:
 
-        * `sudo cp rtl_433.service /etc/systemd/system/`
-        * `sudo systemctl enable rtl_433`
-        * `sudo systemctl start rtl_433`
-       Now, whenever the monitoring system is rebooted, it will restart the rtl_433 service and the mqtt service needed to broadcast in JSON format the information received by the RTL\_433 dongle as ISM packets.
+	* `sudo cp rtl_433.service /etc/systemd/system/`
+	* `sudo systemctl enable rtl_433`
+	* `sudo systemctl start rtl_433`
+       
+ Now, whenever the monitoring system is rebooted, it will restart the rtl_433 service and the mqtt service needed to broadcast in JSON format the information received by the RTL\_433 dongle as ISM packets.
+ 
+## Known Issues
+
+On occasion, pressing the STOP button in `rtl_watch`results in a hung application (at least on Mac OSX), requiring a forced-quit.  This appears to be related to the Python GIL issue and may disappear in future Python releases or on other systems.
+       
+## Related Tools
+These related `rtl_433` tools might also be helpful:
+
+* [`rtl_snr`](https://github.com/hdtodd/rtl_snr): Analyzes the JSON logs on the system that runs `rtl_433` to catalog the devices seen and analyze their SNR characteristics.  Equivalent to `rtl_watch` but for processing log files.
+* [DNT](https://github.com/hdtodd/DNT): Display temperatures from remote thermometers in your neighborhood.  Use the information from `rtl_snr` or `rtl_watch` about thermometers in your neighborhood and then monitor them with a real-time display.
 
 ## Author
 
-David Todd, hdtodd@gmail.com, 2023.02.28
-
-
-
+David Todd, hdtodd@gmail.com, 2023.03.04.

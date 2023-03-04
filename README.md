@@ -1,4 +1,4 @@
-# rtl\_watch: rtl\_433 monitor
+# rtl\_watch: Real-time rtl\_433 monitor
 
 ### Real-time monitor of rtl_433 for ISM devices
 

@@ -35,7 +35,7 @@ import json
 import time
 import getopt, sys
 from paho.mqtt import client as mqtt_client
-from datetime import datetime
+import datetime
 import class_stats as stats
 
 ###############################################################################
@@ -107,6 +107,30 @@ def getarg():
         helper()
         quit()
 
+
+###############################################################################
+# Convert time from various formats to epoch time
+def CnvTime(ts):
+    if ts.find("-") > 0:
+        try:
+            eTime = datetime.datetime.fromisoformat(ts).timestamp()
+        except ValueError as e:
+            err={}
+            print("datetime error in input line", lc, "converting time string: ", ts)
+            print("datetime  msg:", err.get("error", str(e)))
+            quit()
+    else:
+        try:
+            eTime = float(ts)
+        except ValueError as e:
+            err = {}
+            print("Datetime conversion failed on line", lc, "with datetime string", ts)
+            print("float() error msg:", err.get("error", str(e)))
+            quit()
+    return(eTime)
+
+
+###############################################################################
 # Button action routines
 def sortDevice():
     mqtt.loop_stop()
@@ -224,7 +248,7 @@ def subscribe(mqtt: mqtt_client):
         # parse the json payload
         y = json.loads(msg.payload.decode())
         # Get time in seconds since Epoch for comparison purposes, with 2 sec threshhold
-        eTime = time.mktime(time.strptime(y["time"], "%Y-%m-%d %H:%M:%S"))
+        eTime = CnvTime(y["time"])
         # Is this a duplicate record?  Use time+model+id as a fingerprint to tell.
         # If not a duplicate entry, then process & record; else skip
         # Some records don't have an "id" field, so just use "model" in those cases
@@ -324,7 +348,7 @@ devices = {}
 totrecs = 0
 dedups  = 0
 devnum = 0
-t = datetime.now()
+t = datetime.datetime.now()
 win = tk.Tk()
 hfont = tkf.Font(size=40)
 bfont = tkf.Font(size=24)

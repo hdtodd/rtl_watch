@@ -1,4 +1,5 @@
 #! /usr/bin/env python3
+#  rtl_watch
 #  Python program for real-time monitoring of ISM packets.
 #
 #  Uses an ISM-band monitoring computer that runs rtl_433 to
@@ -39,6 +40,7 @@ import random
 import json
 import time
 import datetime
+import math
 from   enum import IntEnum
 try:
     import tkinter as tk
@@ -48,7 +50,6 @@ except ImportError:
     import Tkinter as tk
     import ttk
     import Tkinter.font as tkFont
-import class_stats as stats
 
 AP_DESCRIPTION="""
 DNT:  Real-time monitor for ISM-band device transmissions
@@ -59,7 +60,29 @@ AP_EPILOG="""
 
 """
 
+###############################################################################
+# A class to compute mean, standard deviation, min, and max of a stream
+# of numbers in a single pass via recursion
+class Stats():
 
+   def __init__(self, x):
+      self.count = 1
+      self.mean  = x
+      self.std2  = 0.0
+      self.min   = x
+      self.max   = x
+      
+   def append(self,x):
+      self.count += 1
+      self.mean   = ((self.count-1)*self.mean + x)/self.count
+      self.std2   = 0 if self.count<2 else ( (self.count-2)*self.std2 +
+                                             (self.count*(self.mean-x)**2)/(self.count-1) )/(self.count-1)
+      self.min    = x if x<self.min else self.min
+      self.max    = x if x>self.max else self.max
+      return
+
+   def get(self):
+      return (self.count, self.mean, math.sqrt(self.std2), self.min, self.max)
 
 ###############################################################################
 # Global variable initialization
@@ -106,6 +129,7 @@ thresh = 2.0
 lastEntry = { "time":0.0, "device":"" }
 
 first_rec = True
+
 
 ##########################################################################################
 # DoubleScrolledFrame class adapted from
@@ -519,7 +543,7 @@ def subscribe(mqtt: mqtt_client):
                              tk.StringVar(), tk.StringVar(), tk.StringVar() ) )
                 row = add_row(devnum, tbl[devnum][0], tbl[devnum][1], tbl[devnum][2],
                               tbl[devnum][3], tbl[devnum][4], tbl[devnum][5])
-                devices[device] = stats.stats(snr)
+                devices[device] = Stats(snr)
                 (cnt,snr,sigma,min,max) = devices[device].get()
                 tbl[devnum][0].set(device)
                 tbl[devnum][1].set(cnt)

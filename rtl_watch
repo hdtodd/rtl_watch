@@ -1,4 +1,5 @@
-#! /usr/bin/python3 rtl_watch.py
+#! /usr/bin/env python3
+#  rtl_watch
 #  Python program for real-time monitoring of ISM packets.
 #
 #  Uses an ISM-band monitoring computer that runs rtl_433 to
@@ -43,14 +44,14 @@ import class_stats as stats
 
 # MQTT connection parameters
 # Parameters used to establish the mqtt connection to the rtl_433 receiver mqtt publisher
-broker = '<mymonitor>'
+broker = 'pi-1'
 port = 1883
-topic = "rtl_433/<mymonitor>/events"
+topic = "rtl_433/+/events"
 # If your mqtt broker is secured, provide login info
 # generate client ID with pub prefix randomly
 client_id = f'python-mqtt-{random.randint(0, 100)}'
-username = '<myusername>'
-password = '<mypassword>'
+username = ''
+password = ''
 ##  *** END LOCAL MODIFICATIONS ***
 ###############################################################################
 

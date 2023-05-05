@@ -100,6 +100,7 @@ client_id = f'python-mqtt-{random.randint(0, 100)}'
 win        = None
 frm_table  = None
 fullscreen = False
+bfont      = None
 dfont      = None
 hfont      = None
 lfont      = None
@@ -436,6 +437,7 @@ def toggle_fullscreen(event=None):
 def resize(event=None):
     global dfont
     global lfont
+    global hfont
     global win
 
     # Resize font based on frame height (minimum size of 12)
@@ -446,6 +448,7 @@ def resize(event=None):
 
     return
 
+"""
 #######################################################################################
 # Table management and display
 
@@ -473,6 +476,7 @@ def add_row(dRow):
     lbl_flag.grid(row=dRow, column=3, padx=5, pady=5, sticky=tk.E)
     row.pack(side="top")
     return
+"""
 
 ###############################################################################
 # MQTT functions and display updating
@@ -527,7 +531,6 @@ def subscribe(mqtt: mqtt_client):
 
         if eTime>lastEntry["time"]+dup_thresh and dev != lastEntry["device"]:
             dedups += 1
-            drow = -1
             snr = 0.0 if not ('snr' in y) else float(y['snr'])
             print("{:<25} {:<20} snr={:>4.1f}".format(dev, y["time"], snr) )
 
@@ -541,7 +544,7 @@ def subscribe(mqtt: mqtt_client):
                 #   in the data table and in the display table
                 devices[dev].append(snr)
                 (cnt,snr,sigma,min,max) = devices[dev].get()
-                for i in range (1, devnum+1):
+                for i in range (1, len(tbl)):
                     if tbl[i][0].get()==dev:
                         tbl[i][1].set(cnt)
                         tbl[i][2].set(round(snr,1))
@@ -554,20 +557,16 @@ def subscribe(mqtt: mqtt_client):
                 #   2) create a display table row for it
                 #   3) connect the display variables to the table
                 #   4) assign the values to the display
-                devnum += 1
-                tbl.append( (tk.StringVar(), tk.StringVar(), tk.StringVar(),
-                             tk.StringVar(), tk.StringVar(), tk.StringVar() ) )
-                row = add_row(devnum, tbl[devnum][0], tbl[devnum][1], tbl[devnum][2],
-                              tbl[devnum][3], tbl[devnum][4], tbl[devnum][5])
                 devices[dev] = Stats(snr)
+                dRow = len(tbl)
+                add_row(dRow)
                 (cnt,snr,sigma,min,max) = devices[dev].get()
-                tbl[devnum][0].set(dev)
-                tbl[devnum][1].set(cnt)
-                tbl[devnum][2].set(round(snr,1))
-                tbl[devnum][3].set(round(sigma,2))
-                tbl[devnum][4].set(round(min,1))
-                tbl[devnum][5].set(round(max,1))
-                row.pack(side="top")
+                tbl[dRow][0].set(dev)
+                tbl[dRow][1].set(cnt)
+                tbl[dRow][2].set(round(snr,1))
+                tbl[dRow][3].set(round(sigma,2))
+                tbl[dRow][4].set(round(min,1))
+                tbl[dRow][5].set(round(max,1))
                 
             lastEntry["time"] = eTime
             lastEntry["device"] = dev
@@ -580,27 +579,40 @@ def subscribe(mqtt: mqtt_client):
 #######################################################################################
 # Table management and display
 
-def add_row(devnum, device, reccnt, snr, stdev, min, max):
+# Add a row to the display table, "tbl", at current next-entry index and increment the index                         
+# Format the widgets, and handle row 0 differently as it is the header                                               
+# Widget values get filled in by "main" (for header) or "on_message" (for data values) 
+def add_row(dRow):
+    global frm_table, tbl
+
+    tbl.append( (tk.StringVar(), tk.StringVar(), tk.StringVar(),
+                 tk.StringVar(), tk.StringVar(), tk.StringVar() ) )
     row = tk.Frame(frm_table)
-    tblrow.append(row)
-    bg = "skyblue2" if devnum==0 else "white"
-    lbl_device = tk.Label(row, width=25, textvariable=device, font=dfont, bg=bg)
-    lbl_reccnt = tk.Label(row, width=10, textvariable=reccnt, font=dfont, bg=bg)
-    lbl_snr    = tk.Label(row, width=10, textvariable=snr,    font=dfont, bg=bg)
-    lbl_stdev  = tk.Label(row, width=10, textvariable=stdev,  font=dfont, bg=bg)
-    lbl_min    = tk.Label(row, width=10, textvariable=min,    font=dfont, bg=bg)
-    lbl_max    = tk.Label(row, width=10, textvariable=max,    font=dfont, bg=bg)
-    lbl_device.grid(row=devnum, column=0, padx=5, pady=6, sticky="W")
-    lbl_reccnt.grid(row=devnum, column=1, padx=5, pady=6, sticky="W")
-    lbl_snr.grid(   row=devnum, column=2, padx=5, pady=6, sticky="W")
-    lbl_stdev.grid( row=devnum, column=3, padx=5, pady=6, sticky="W")
-    lbl_min.grid(   row=devnum, column=4, padx=5, pady=6, sticky="W")
-    lbl_max.grid(   row=devnum, column=5, padx=5, pady=6, sticky="W")
-    return row
+    # Color the header row differently                                                                               
+    if dRow==0:
+        (bg, fg, fbg, ffg) = ("cornflower blue", "white", "yellow", "black")
+    else:
+        (bg, fg, fbg, ffg) = ("white", "black", "white", "black")
+
+    lbl_device = tk.Label(row, width=30, textvariable=tbl[dRow][0], font=dfont, bg=bg)
+    lbl_reccnt = tk.Label(row, width=10, textvariable=tbl[dRow][1], font=dfont, bg=bg)
+    lbl_snr    = tk.Label(row, width=10, textvariable=tbl[dRow][2], font=dfont, bg=bg)
+    lbl_stdev  = tk.Label(row, width=10, textvariable=tbl[dRow][3], font=dfont, bg=bg)
+    lbl_min    = tk.Label(row, width=10, textvariable=tbl[dRow][4], font=dfont, bg=bg)
+    lbl_max    = tk.Label(row, width=10, textvariable=tbl[dRow][5], font=dfont, bg=bg)
+    lbl_device.grid(row=dRow, column=0, padx=2, pady=2, sticky="W")
+    lbl_reccnt.grid(row=dRow, column=1, padx=2, pady=2, sticky="W")
+    lbl_snr.grid(   row=dRow, column=2, padx=2, pady=2, sticky="W")
+    lbl_stdev.grid( row=dRow, column=3, padx=2, pady=2, sticky="W")
+    lbl_min.grid(   row=dRow, column=4, padx=2, pady=2, sticky="W")
+    lbl_max.grid(   row=dRow, column=5, padx=2, pady=2, sticky="W")
+    row.pack(side="top")
+    return
 
 
 ###############################################################################
 # Create the display panels and table section
+"""
 def create_display():    
     global win, frm_table, dfont, hfont, lfont
     # Create the main window
@@ -648,38 +660,26 @@ def create_display():
     # Have <ESC> toggle window, and call resize() every time the window is resized
     win.bind('<Escape>', toggle_fullscreen)
     return
+"""
 
-#######################################################################################
-#  Main script
-
-if __name__ == "__main__":
-
-    t = datetime.datetime.now()
-    signal.signal(signal.SIGINT, quit_prog)
-
-    set_params()
-
-    devices = {}
-    totrecs = 0
-    dedups  = 0
-    devnum = 0
-
+def create_display():
+    global win, frm_table, bfont, dfont, hfont, lfont
+    global earliest_time, last_time
+    
+    # Create the main window and dynamic fonts
     win = tk.Tk()
+    win.title("rtl_watch")
     hfont = tkFont.Font(size=40)
     bfont = tkFont.Font(size=24)
-    dfonat = tkFont.Font(size=18)
+    dfont = tkFont.Font(size=18)
+    lfont = tkFont.Font(size=30, weight="bold")
 
-    win.title("rtl_watch")
-
-    # Build the title
-
+    # Build the title section of the display
     frm_title = tk.Frame(win, borderwidth=10, relief="groove")
-
-
-    frm_title.pack(side="top", fill="x", expand=True)
-    lbl_title  = tk.Label(frm_title, text="rtl_watch: monitor devices broadcasting over ISM bands using rtl_433",
+    frm_title.pack(side="top", fill="x", expand=False)
+    lbl_title  = tk.Label(frm_title, text="rtl_watch: monitor ISM devices using rtl_433",
                           font=hfont, bg="medium sea green", fg="white")
-    lbl_title.pack(anchor="center", fill="x", padx=10, pady=10)
+    lbl_title.pack(anchor="center", fill="x")
 
     # Build the button menu
     frm_toolbar = tk.Frame(win)
@@ -688,7 +688,7 @@ if __name__ == "__main__":
     btn_reccnt  = tk.Button(frm_toolbar, text="Sort Record Count", command=sortRecCnt, font=bfont)
     btn_snr     = tk.Button(frm_toolbar, text="Sort SNR",          command=sortSnr,    font=bfont)
     btn_prtsum  = tk.Button(frm_toolbar, text="Print Summary",     command=printsum,   font=bfont, fg="green")
-    btn_stop    = tk.Button(frm_toolbar, text="Stop",              command=quit_prog,  font=bfont, fg="red")
+    btn_stop    = tk.Button(frm_toolbar, text="Quit",              command=quit_prog,  font=bfont, fg="red")
     btn_device.pack(side="left")
     btn_reccnt.pack(side="left")
     btn_snr.pack(side="left")
@@ -697,7 +697,7 @@ if __name__ == "__main__":
 
     # Build the information section
     frm_info = tk.Frame(win, borderwidth=5, relief="raised")
-    frm_info.pack(side="top", fill="x", expand=True)
+    frm_info.pack(side="top", fill="x", expand=False)
     earliest_time = tk.StringVar()
     earliest_time.set(t.strftime('%Y-%m-%d %H:%M:%S'))
     last_time = tk.StringVar()
@@ -715,26 +715,56 @@ if __name__ == "__main__":
     lbl_ftime = tk.Label(frm_info, textvariable=earliest_time, font=dfont)
     lbl_ftime.pack(side="left", padx=5, pady=5)
 
-    # Build the table, column header first
-    frm_table = tk.Frame(win, borderwidth=5, relief="groove")
+    # And create the table for data display, column header first
+    frm_table = DoubleScrolledFrame(win, width=1000, relief="groove")
     frm_table.pack(side="top", fill="both", expand=True, padx=5, pady=5)
-    tblrow = []
+
+    # And insert the header as the first row
+    add_row(0)
+    tbl[0][0].set("Device\nmodel+id")
+    tbl[0][1].set("Record\nCount")
+    tbl[0][2].set("mean\nSNR")
+    tbl[0][3].set("SNR\nStd Dev")
+    tbl[0][4].set("Min\nSNR")
+    tbl[0][5].set("Max\nSNR")
+
+    win.bind('<Escape>', toggle_fullscreen)
+    return
+
+#######################################################################################
+#  Main script
+
+if __name__ == "__main__":
+
+    t = datetime.datetime.now()
+    signal.signal(signal.SIGINT, quit_prog)
+
+    # Get command-line and enviroment parameters and set program variables
+    set_params()
+
+    # Initialize the Device:Data dictionary
+    devices = {}
+
+    # Init the list of widget rows to display
     tbl = []
+    
+    # Init the performance counters
+    totrecs = 0
+    dedups  = 0
     devnum = 0
-    tbl.append( (tk.StringVar(), tk.StringVar(), tk.StringVar(),
-                   tk.StringVar(), tk.StringVar(), tk.StringVar() ) )
-    row = add_row(devnum, tbl[devnum][0], tbl[devnum][1], tbl[devnum][2], tbl[devnum][3], tbl[devnum][4], tbl[devnum][5])
-    tbl[devnum][0].set("Device\nmodel+id")
-    tbl[devnum][1].set("Record\nCount")
-    tbl[devnum][2].set("mean\nSNR")
-    tbl[devnum][3].set("SNR\nStd Dev")
-    tbl[devnum][4].set("Min\nSNR")
-    tbl[devnum][5].set("Max\nSNR")
 
-    tblrow.append(row)
-    row.pack(side="top")
+    # Create the display
+    create_display()
 
+    # Connect to the mqtt host and subscribe to the feed.                                                            
+    # This activates the on_message procedure in which 
+    #   MQTT events cause the displayed values to be updated
+    
     mqtt = connect_mqtt()
     mqtt.loop_start()
 
+    if debug:
+        print("Entering main run loop")
+
+    # Start the tkinter main loop and let MQTT events populate the display
     win.mainloop()

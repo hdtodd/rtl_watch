@@ -88,23 +88,26 @@ class Stats():
 ##########################################################################################
 # Define a class to hold the data for a device and procedures to create, update, access
 class Data:
-    def __init__(self, snr, eTime, freq, battery, status):
-        self.pktcount = 1
-        self.xmtcount = 0
-        self.pkt_xmt  = 1
+    def __init__(self, dRow, eTime, snr, freq, battery, status):
+        self.dRow          = dRow
+        self.pktcount      = 1
+        self.xmtcount      = 0
+        self.pkt_xmt       = 1
         self.last_pkt_time = eTime
         self.last_xmt_time = eTime
-        self.battery = battery
-        self.status = status
-        self.SNR  = None if omitSNR  else stats(snr)
-        self.ITGT = None
-        self.Freq = None if omitFreq else stats(freq)
-        self.PPT  = None
+        self.battery       = battery
+        self.status        = status
+        self.SNR           = None if omitSNR  else Stats(snr)
+        self.ITGT          = None 
+        self.Freq          = None if omitFreq else Stats(freq)
+        self.PPT           = None 
+        self.wlevel        = Warn.ALARM if battery==0 else Warn.OK
+        self.warn          = Warnings[self.wlevel]
         return
 
     # Update information about this device and return a
     #  flag to indicate if it was a duplicate record for this xmit
-    def update(self, snr, eTime, freq, battery, status):
+    def update(self, eTime, snr, freq, battery, status):
         self.pktcount += 1
         self.last_pkt_time = eTime
         dup = eTime < self.last_xmt_time + dup_thresh
@@ -112,7 +115,7 @@ class Data:
             self.SNR.append(snr)
         if not omitITGT and not dup:
             if self.ITGT is None:
-                self.ITGT = stats(eTime-self.last_xmt_time)
+                self.ITGT = Stats(eTime-self.last_xmt_time)
             else:
                 self.ITGT.append(eTime-self.last_xmt_time)
             self.last_xmt_time = eTime
@@ -123,23 +126,15 @@ class Data:
         if not omitPPT:
             if not dup:
                 if self.PPT is None:
-                    self.PPT = stats(self.pkt_xmt)
+                    self.PPT = Stats(self.pkt_xmt)
                 else:
                     self.PPT.append(self.pkt_xmt)
                 self.pkt_xmt = 0
             self.pkt_xmt += 1
-        if battery != self.battery:
-            batt_change = True
-            self.battery = battery
-        else:
-            batt_change = False
-        if status != self.status:
-            stat_change = True
-            self.status = status
-        else:
-            stat_change = False
-         
-        return (dup, batt_change, stat_change)
+        self.wlevel    = max(self.wlevel, Warn.ALARM if battery==0 else Warn.OK,
+                             Warn.ALERT if status != self.status else Warn.OK)
+        self.warn      = Warnings[self.wlevel]
+        return dup
 
     def get(self):
         return (self.pktcount,
@@ -193,10 +188,6 @@ Warn       = IntEnum('Warn', [ ('OK', 0), ('ALERT', 1), ('ALARM', 2)])
 
 # Set 2-sec threshhold for rejecting duplicate records
 dup_thresh = 2.0
-
-# Set blank "lastEntry" key record fields for rejecting duplicate records
-#   time+/-2sec with model/channel/id the same count as a duplicate record
-lastEntry = { "time":0.0, "device":"" }
 
 ##########################################################################################
 # DoubleScrolledFrame class adapted from
@@ -324,7 +315,8 @@ def make_parser():
 # Set execution parameters from cmdline
 def set_params():
     global host, topic, username, password, port, useF, tScale, debug, debugW
-
+    global dup_thresh
+    
     args = make_parser()
 
     #  We need host and topic, so if not already provided by
@@ -576,6 +568,23 @@ def subscribe(mqtt: mqtt_client):
         global devices
         global dedups, totrecs
         global tbl, devnum
+
+        def write_display_row_for_device(dev):
+            dRow = devices[dev].dRow
+            (pkt,xmt,SNR,ITGT,Freq,PPT) = devices[dev].get()
+            (cnt,snr,sigma,min,max) = SNR.get()
+            try:
+                tbl[dRow][0].set(dev)
+                tbl[dRow][1].set(pkt)
+                tbl[dRow][2].set(xmt)
+                tbl[dRow][3].set(round(snr,1))
+                tbl[dRow][4].set(round(sigma,2))
+                tbl[dRow][5].set(round(min,1))
+                tbl[dRow][6].set(round(max,1))
+            except Exception as e:
+                print("Exception when trying to set display values for row", dRow)
+                print("Exception:", str(e))
+            return
         
         # count this new record
         totrecs += 1
@@ -598,56 +607,39 @@ def subscribe(mqtt: mqtt_client):
 
         # Convert data values to standard form
         eTime   = CnvTime(y["time"])
+        snr     = 0.0 if not ('snr' in y) else float(y['snr'])
         freq    = 0.0 if "freq" not in y else float(y["freq"])
         battery = None if "battery_ok" not in y else y["battery_ok"]
         status  = None if "status"     not in y else y["status"]
 
-        if eTime>lastEntry["time"]+dup_thresh and dev != lastEntry["device"]:
+        if dev in devices:
+            dup = devices[dev].update(eTime, snr, freq, battery, status)
+        else:
+            dRow = len(tbl)
+            if debug:
+                print("Appending new device", dev, " to end of tbl at row", dRow)
+            devices[dev] = Data(dRow, eTime, snr, freq, battery, status)
+            add_row(dRow)
+            dup = False
+
+        if not dup:
             dedups += 1
-            snr = 0.0 if not ('snr' in y) else float(y['snr'])
-            print("{:<25} {:<20} snr={:>4.1f}".format(dev, y["time"], snr) )
+            if debug:
+                print("{:<25} {:<20} snr={:>4.1f}".format(dev, y["time"], snr) )
 
             if first_rec:
                 earliest_time.set( y["time"])
                 first_rec = False
             last_time.set(y["time"])
 
-            if dev in devices:
-                # We've seen this device, so just update the values
-                #   in the data table and in the display table
-                devices[dev].append(snr)
-                (cnt,snr,sigma,min,max) = devices[dev].get()
-                for i in range (1, len(tbl)):
-                    if tbl[i][0].get()==dev:
-                        tbl[i][1].set(cnt)
-                        tbl[i][2].set(round(snr,1))
-                        tbl[i][3].set(round(sigma,2))
-                        tbl[i][4].set(round(min,1))
-                        tbl[i][5].set(round(max,1))
-                        
-            else:
-                # This is a new device: 1) create a table entry for it;
-                #   2) create a display table row for it
-                #   3) connect the display variables to the table
-                #   4) assign the values to the display
-                devices[dev] = Stats(snr)
-                dRow = len(tbl)
-                add_row(dRow)
-                (cnt,snr,sigma,min,max) = devices[dev].get()
-                tbl[dRow][0].set(dev)
-                tbl[dRow][1].set(cnt)
-                tbl[dRow][2].set(round(snr,1))
-                tbl[dRow][3].set(round(sigma,2))
-                tbl[dRow][4].set(round(min,1))
-                tbl[dRow][5].set(round(max,1))
-                
-            lastEntry["time"] = eTime
-            lastEntry["device"] = dev
-            
+            write_display_row_for_device(dev)
+            return #Fron on_message
+        
     mqtt.subscribe(topic)
     mqtt.on_message = on_message
-    print("subscribed to mqtt feed")
-
+    if debug:
+        print("Subscribed to mqtt feed")
+    return #From subscribe()
 
 #######################################################################################
 # Table management and display
@@ -658,7 +650,7 @@ def subscribe(mqtt: mqtt_client):
 def add_row(dRow):
     global frm_table, tbl
 
-    tbl.append( (tk.StringVar(), tk.StringVar(), tk.StringVar(),
+    tbl.append( (tk.StringVar(), tk.StringVar(), tk.StringVar(), tk.StringVar(),
                  tk.StringVar(), tk.StringVar(), tk.StringVar() ) )
     row = tk.Frame(frm_table)
     # Color the header row differently                                                                               
@@ -668,17 +660,19 @@ def add_row(dRow):
         (bg, fg, fbg, ffg) = ("white", "black", "white", "black")
 
     lbl_device = tk.Label(row, width=30, textvariable=tbl[dRow][0], font=dfont, bg=bg)
-    lbl_reccnt = tk.Label(row, width=10, textvariable=tbl[dRow][1], font=dfont, bg=bg)
-    lbl_snr    = tk.Label(row, width=10, textvariable=tbl[dRow][2], font=dfont, bg=bg)
-    lbl_stdev  = tk.Label(row, width=10, textvariable=tbl[dRow][3], font=dfont, bg=bg)
-    lbl_min    = tk.Label(row, width=10, textvariable=tbl[dRow][4], font=dfont, bg=bg)
-    lbl_max    = tk.Label(row, width=10, textvariable=tbl[dRow][5], font=dfont, bg=bg)
+    lbl_pktcnt = tk.Label(row, width=10, textvariable=tbl[dRow][1], font=dfont, bg=bg)
+    lbl_xmtcnt = tk.Label(row, width=10, textvariable=tbl[dRow][2], font=dfont, bg=bg)
+    lbl_snr    = tk.Label(row, width=10, textvariable=tbl[dRow][3], font=dfont, bg=bg)
+    lbl_stdev  = tk.Label(row, width=10, textvariable=tbl[dRow][4], font=dfont, bg=bg)
+    lbl_min    = tk.Label(row, width=10, textvariable=tbl[dRow][5], font=dfont, bg=bg)
+    lbl_max    = tk.Label(row, width=10, textvariable=tbl[dRow][6], font=dfont, bg=bg)
     lbl_device.grid(row=dRow, column=0, padx=2, pady=2, sticky="W")
-    lbl_reccnt.grid(row=dRow, column=1, padx=2, pady=2, sticky="W")
-    lbl_snr.grid(   row=dRow, column=2, padx=2, pady=2, sticky="W")
-    lbl_stdev.grid( row=dRow, column=3, padx=2, pady=2, sticky="W")
-    lbl_min.grid(   row=dRow, column=4, padx=2, pady=2, sticky="W")
-    lbl_max.grid(   row=dRow, column=5, padx=2, pady=2, sticky="W")
+    lbl_pktcnt.grid(row=dRow, column=1, padx=2, pady=2, sticky="W")
+    lbl_xmtcnt.grid(row=dRow, column=2, padx=2, pady=2, sticky="W")
+    lbl_snr.grid(   row=dRow, column=3, padx=2, pady=2, sticky="W")
+    lbl_stdev.grid( row=dRow, column=4, padx=2, pady=2, sticky="W")
+    lbl_min.grid(   row=dRow, column=5, padx=2, pady=2, sticky="W")
+    lbl_max.grid(   row=dRow, column=6, padx=2, pady=2, sticky="W")
     row.pack(side="top")
     return
 
@@ -747,11 +741,12 @@ def create_display():
     # And insert the header as the first row
     add_row(0)
     tbl[0][0].set("Device\nmodel/channel/id")
-    tbl[0][1].set("Record\nCount")
-    tbl[0][2].set("mean\nSNR")
-    tbl[0][3].set("SNR\nStd Dev")
-    tbl[0][4].set("Min\nSNR")
-    tbl[0][5].set("Max\nSNR")
+    tbl[0][1].set("Pkt\nCount")
+    tbl[0][2].set("Xmit\nCount")
+    tbl[0][3].set("Mean\nSNR")
+    tbl[0][4].set("SNR\nStd Dev")
+    tbl[0][5].set("Min\nSNR")
+    tbl[0][6].set("Max\nSNR")
 
     win.bind('<Escape>', toggle_fullscreen)
     return

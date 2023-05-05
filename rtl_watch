@@ -60,9 +60,8 @@ AP_EPILOG="""
 
 """
 
-###############################################################################
-# A class to compute mean, standard deviation, min, and max of a stream
-# of numbers in a single pass via recursion
+###################################################################################
+# A class to compute mean, standard deviation, min, and max of a stream  of numbers
 class Stats():
 
    def __init__(self, x):
@@ -84,7 +83,7 @@ class Stats():
    def get(self):
       return (self.count, self.mean, math.sqrt(self.std2), self.min, self.max)
 
-###############################################################################
+###################################################################################
 # Global variable initialization
 
 # MQTT connection management
@@ -105,6 +104,7 @@ dfont      = None
 hfont      = None
 lfont      = None
 pktcnt     = 0
+first_rec  = True
 debug      = False
 CSIBLK     = "\033[30m"
 CSIRED     = "\033[31m"
@@ -121,15 +121,9 @@ Warn       = IntEnum('Warn', [ ('OK', 0), ('ALERT', 1), ('ALARM', 2)])
 # Set 2-sec threshhold for rejecting duplicate records
 dup_thresh = 2.0
 
-# Set 2-sec threshhold for rejecting duplicate records
-thresh = 2.0
-
 # Set blank "lastEntry" key record fields for rejecting duplicate records
 #   time+/-2sec with model+id the same count as a duplicate record
 lastEntry = { "time":0.0, "device":"" }
-
-first_rec = True
-
 
 ##########################################################################################
 # DoubleScrolledFrame class adapted from
@@ -385,10 +379,28 @@ def sortSnr():
     mqtt.loop_start()    
     return
 
-def stop(event=None):
+###############################################################################
+# Reset device warnings to OK and rewrite the display table accordingly
+def reset_warn():
     mqtt.loop_stop()
+    for dev in devices:
+        devices[dev].battery = 1
+        devices[dev].wlevel  = Warn.OK
+        devices[dev].warn    = Warnings[Warn.OK]
+    for row in range(1, len(tbl)):
+        tbl[row][3].set(Warnings[Warn.OK])
+    mqtt.loop_start()
+    return
+
+###############################################################################
+# CNTL-C and QUIT button handler
+def quit_prog(event=None):
+    mqtt.loop_stop()
+    print()
+    time.sleep(1)      # let events clear (we hope)
     mqtt.disconnect()
     win.quit()
+    sys.exit(0)
 
 def printsum():
     global devices
@@ -406,7 +418,6 @@ def printsum():
         print("{:<25} {:>8} {:>8.1f} ±{:>5.2f} {:>8.1f} {:>8.1f}".format(device,n,avg,std,min,max))
     print("\n____________________________________________________________________")
     mqtt.loop_start()
-#    quit()
 
 ###############################################################################
 # Functions for displaying
@@ -463,8 +474,6 @@ def add_row(dRow):
     row.pack(side="top")
     return
 
-
-
 ###############################################################################
 # MQTT functions and display updating
 # Connect to  MQTT host
@@ -504,29 +513,36 @@ def subscribe(mqtt: mqtt_client):
         # Is this a duplicate record?  Use time+model+id as a fingerprint to tell.
         # If not a duplicate entry, then process & record; else skip
         # Some records don't have an "id" field, so just use "model" in those cases
+        # If not a device record, just return
+        if "model" not in y:
+            return
+
+        #  Create the device identifier as "model/channel/id"
+        dev = y["model"] + "/"
+        if "channel" in y:
+            dev += str(y["channel"])
+        dev += "/"
         if "id" in y:
-             device = y["model"]+" "+ str(y["id"])
-        else:
-             device = y["model"]
-        if eTime>lastEntry["time"]+thresh and device != lastEntry["device"]:
+            dev += str(y["id"])
+
+        if eTime>lastEntry["time"]+dup_thresh and dev != lastEntry["device"]:
             dedups += 1
             drow = -1
             snr = 0.0 if not ('snr' in y) else float(y['snr'])
-            print("{:<25} {:<20} snr={:>4.1f}".format(
-                device, y["time"], snr) )
+            print("{:<25} {:<20} snr={:>4.1f}".format(dev, y["time"], snr) )
 
             if first_rec:
                 earliest_time.set( y["time"])
                 first_rec = False
             last_time.set(y["time"])
 
-            if device in devices:
+            if dev in devices:
                 # We've seen this device, so just update the values
                 #   in the data table and in the display table
-                devices[device].append(snr)
-                (cnt,snr,sigma,min,max) = devices[device].get()
+                devices[dev].append(snr)
+                (cnt,snr,sigma,min,max) = devices[dev].get()
                 for i in range (1, devnum+1):
-                    if tbl[i][0].get()==device:
+                    if tbl[i][0].get()==dev:
                         tbl[i][1].set(cnt)
                         tbl[i][2].set(round(snr,1))
                         tbl[i][3].set(round(sigma,2))
@@ -543,9 +559,9 @@ def subscribe(mqtt: mqtt_client):
                              tk.StringVar(), tk.StringVar(), tk.StringVar() ) )
                 row = add_row(devnum, tbl[devnum][0], tbl[devnum][1], tbl[devnum][2],
                               tbl[devnum][3], tbl[devnum][4], tbl[devnum][5])
-                devices[device] = Stats(snr)
-                (cnt,snr,sigma,min,max) = devices[device].get()
-                tbl[devnum][0].set(device)
+                devices[dev] = Stats(snr)
+                (cnt,snr,sigma,min,max) = devices[dev].get()
+                tbl[devnum][0].set(dev)
                 tbl[devnum][1].set(cnt)
                 tbl[devnum][2].set(round(snr,1))
                 tbl[devnum][3].set(round(sigma,2))
@@ -554,34 +570,11 @@ def subscribe(mqtt: mqtt_client):
                 row.pack(side="top")
                 
             lastEntry["time"] = eTime
-            lastEntry["device"] = device
+            lastEntry["device"] = dev
             
     mqtt.subscribe(topic)
     mqtt.on_message = on_message
     print("subscribed to mqtt feed")
-
-###############################################################################
-# Reset device warnings to OK and rewrite the display table accordingly
-def reset_warn():
-    mqtt.loop_stop()
-    for dev in devices:
-        devices[dev].battery = 1
-        devices[dev].wlevel  = Warn.OK
-        devices[dev].warn    = Warnings[Warn.OK]
-    for row in range(1, len(tbl)):
-        tbl[row][3].set(Warnings[Warn.OK])
-    mqtt.loop_start()
-    return
-
-###############################################################################
-# CNTL-C and QUIT button handler
-def quit_prog(event=None):
-    mqtt.loop_stop()
-    print()
-    time.sleep(1)      # let events clear (we hope)
-    mqtt.disconnect()
-    win.quit()
-    sys.exit(0)
 
 
 #######################################################################################
@@ -695,7 +688,7 @@ if __name__ == "__main__":
     btn_reccnt  = tk.Button(frm_toolbar, text="Sort Record Count", command=sortRecCnt, font=bfont)
     btn_snr     = tk.Button(frm_toolbar, text="Sort SNR",          command=sortSnr,    font=bfont)
     btn_prtsum  = tk.Button(frm_toolbar, text="Print Summary",     command=printsum,   font=bfont, fg="green")
-    btn_stop    = tk.Button(frm_toolbar, text="Stop",              command=stop,       font=bfont, fg="red")
+    btn_stop    = tk.Button(frm_toolbar, text="Stop",              command=quit_prog,  font=bfont, fg="red")
     btn_device.pack(side="left")
     btn_reccnt.pack(side="left")
     btn_snr.pack(side="left")

@@ -29,7 +29,7 @@
 #  to date, and then analysis continues.
 #
 #  Written by H. David Todd, hdtodd@gmail.com, 2023.03.02
-#  V2.0 modifications 2023.05
+#  V2.0.0 modifications 2023.05
 
 import argparse
 import sys
@@ -60,6 +60,8 @@ AP_EPILOG="""
 
 """
 
+VERSION="2.0.0"
+
 ###################################################################################
 # A class to compute mean, standard deviation, min, and max of a stream  of numbers
 class Stats():
@@ -82,6 +84,70 @@ class Stats():
 
    def get(self):
       return (self.count, self.mean, math.sqrt(self.std2), self.min, self.max)
+
+##########################################################################################
+# Define a class to hold the data for a device and procedures to create, update, access
+class Data:
+    def __init__(self, snr, eTime, freq, battery, status):
+        self.pktcount = 1
+        self.xmtcount = 0
+        self.pkt_xmt  = 1
+        self.last_pkt_time = eTime
+        self.last_xmt_time = eTime
+        self.battery = battery
+        self.status = status
+        self.SNR  = None if omitSNR  else stats(snr)
+        self.ITGT = None
+        self.Freq = None if omitFreq else stats(freq)
+        self.PPT  = None
+        return
+
+    # Update information about this device and return a
+    #  flag to indicate if it was a duplicate record for this xmit
+    def update(self, snr, eTime, freq, battery, status):
+        self.pktcount += 1
+        self.last_pkt_time = eTime
+        dup = eTime < self.last_xmt_time + dup_thresh
+        if not omitSNR:
+            self.SNR.append(snr)
+        if not omitITGT and not dup:
+            if self.ITGT is None:
+                self.ITGT = stats(eTime-self.last_xmt_time)
+            else:
+                self.ITGT.append(eTime-self.last_xmt_time)
+            self.last_xmt_time = eTime
+            self.xmtcount += 1
+            self.last_xmt_time = eTime
+        if not omitFreq:
+            self.Freq.append(freq)
+        if not omitPPT:
+            if not dup:
+                if self.PPT is None:
+                    self.PPT = stats(self.pkt_xmt)
+                else:
+                    self.PPT.append(self.pkt_xmt)
+                self.pkt_xmt = 0
+            self.pkt_xmt += 1
+        if battery != self.battery:
+            batt_change = True
+            self.battery = battery
+        else:
+            batt_change = False
+        if status != self.status:
+            stat_change = True
+            self.status = status
+        else:
+            stat_change = False
+         
+        return (dup, batt_change, stat_change)
+
+    def get(self):
+        return (self.pktcount,
+                self.xmtcount,
+                self.SNR,
+                self.ITGT,
+                self.Freq,
+                self.PPT)
 
 ###################################################################################
 # Global variable initialization
@@ -106,7 +172,13 @@ hfont      = None
 lfont      = None
 pktcnt     = 0
 first_rec  = True
+noTPMS     = True
+omitSNR    = False
+omitITGT   = False
+omitFreq   = False
+omitPPT    = False
 debug      = False
+debugW     = False
 CSIBLK     = "\033[30m"
 CSIRED     = "\033[31m"
 CSIYLW     = "\033[93m"
@@ -123,7 +195,7 @@ Warn       = IntEnum('Warn', [ ('OK', 0), ('ALERT', 1), ('ALARM', 2)])
 dup_thresh = 2.0
 
 # Set blank "lastEntry" key record fields for rejecting duplicate records
-#   time+/-2sec with model+id the same count as a duplicate record
+#   time+/-2sec with model/channel/id the same count as a duplicate record
 lastEntry = { "time":0.0, "device":"" }
 
 ##########################################################################################
@@ -225,6 +297,15 @@ def make_parser():
                         help="MQTT password, if needed; defaults to blank")
     parser.add_argument("-p", "--port", type=int, default=port,
                         help="MQTT port (default: %(default)s)")
+    parser.add_argument("-x", "--exclude_noise", type=int, dest="noise",
+                        help="Exclude device records with fewer than 'NOISE' packets seen")
+    parser.add_argument("-w", "--xmt_window", dest="window", type=float,
+                        help="Max time in sec for a packet group to be considered as one transmission (default: %(default)s)")
+    parser.add_argument("-t", "--include_TPMS", action='store_true',
+                        dest="include_TPMS", default=False, 
+                        help="include tire pressure monitors in catalog (default: %(default)s)")
+    parser.add_argument("-o", "--omit", choices=["SNR", "ITGT", "Freq", "PPT"],
+                        nargs="+")
     parser.add_argument("-d", "--debug", dest="debug", action="store_true")
     parser.add_argument("-W", "--warn", dest="warn", action="store_true",
                         help="Insert warnings at pkts 20 & 40 to debug; requires -d")
@@ -235,6 +316,7 @@ def make_parser():
     specifyTemp.add_argument("-F", "--Fahrenheit", dest="degC", action="store_false",
                              default=True,
                              help="Display temperatures in Fahrenheit (default)")
+    parser.add_argument("-v", "--version", action="version", version=VERSION)
     args = parser.parse_args()
     return args
 
@@ -285,6 +367,14 @@ def set_params():
     port     = args.port
     debug    = args.debug
     debugW   = args.debug and args.warn
+    omitSNR  = args.omit is not None and "SNR"  in args.omit
+    omitITGT = args.omit is not None and "ITGT" in args.omit
+    omitFreq = args.omit is not None and "Freq" in args.omit
+    omitPPT  = args.omit is not None and "PPT"  in args.omit
+    noTPMS   = not args.include_TPMS
+    if args.window is not None:
+        dup_thresh = args.window
+
     if debug:
         print("Debug is ON")
         print("Parameter settings in execution are ...")
@@ -295,6 +385,12 @@ def set_params():
         print("\tMQTT port:    ", port)
         print("\tUseF:         ", useF)
         print("\tDebug warnings", debugW)
+        print("\tIncluding" if not omitSNR  else "Excluding", "SNR Stats")
+        print("\tIncluding" if not omitITGT else "Excluding", "ITGT Stats")
+        print("\tIncluding" if not omitFreq else "Excluding", "Freq Stats")
+        print("\tExcluding" if     noTPMS   else "Including", "TPMS devices")
+        print("\tUsing transmission window of", dup_thresh)
+
     return
 
 
@@ -361,15 +457,15 @@ def sortRecCnt():
 
 def sortSnr():
     mqtt.loop_stop()
-    cntlist = {}
+    snrlist = {}
     for device in devices:
         (cnt,snr,sigma,min,max) = devices[device].get()
         key = f"{snr:05.1f}" + device
-        cntlist[key] = device
+        snrlist[key] = device
     row = 1
-    for rec in sorted(cntlist, reverse=True):
+    for rec in sorted(snrlist, reverse=True):
         (cnt,snr,sigma,min,max) = devices[cntlist[rec]].get()
-        tbl[row][0].set(cntlist[rec])
+        tbl[row][0].set(snrlist[rec])
         tbl[row][1].set(cnt)
         tbl[row][2].set(round(snr,1))
         tbl[row][3].set(round(sigma,2))
@@ -435,6 +531,7 @@ def toggle_fullscreen(event=None):
 
 # Automatically resize font size based on window size
 def resize(event=None):
+    global bfont
     global dfont
     global lfont
     global hfont
@@ -443,40 +540,12 @@ def resize(event=None):
     # Resize font based on frame height (minimum size of 12)
     # Use negative number for "pixels" instead of "points"
     hfont.configure(size=-max(36, int((win.winfo_height() / 18))))
+    bfont.configure(size=-max(24, int((win.winfo_height() / 24))))
     dfont.configure(size=-max(24, int((win.winfo_height() / 24))))
     lfont.configure(size=-max(30, int((win.winfo_height() / 24))))
 
     return
 
-"""
-#######################################################################################
-# Table management and display
-
-# Add a row to the display table, "tbl", at current next-entry index and increment the index
-# Format the widgets, and handle row 0 differently as it is the header
-# Widget values get filled in by "main" (for header) or "on_message" (for data values)
-def add_row(dRow):
-    global frm_table, tbl
-    tbl.append( (tk.StringVar(), tk.StringVar(), tk.StringVar() , tk.StringVar()) )
-    row = tk.Frame(frm_table)
-    # Color the header row differently
-    if dRow==0:
-        (bg, fg, fbg, ffg) = ("cornflower blue", "white", "yellow", "black")
-    else:
-        (bg, fg, fbg, ffg) = ("white", "black", "white", "black")
-
-    lbl_loc  = tk.Label(row, width=30, textvariable=tbl[dRow][0], font=dfont, bg=bg, fg=fg)
-    lbl_temp = tk.Label(row, width=7,  textvariable=tbl[dRow][1], font=dfont, bg=bg, fg=fg)
-    lbl_hum  = tk.Label(row, width=4,  textvariable=tbl[dRow][2], font=dfont, bg=bg, fg=fg)
-    lbl_flag = tk.Label(row, width=1,  textvariable=tbl[dRow][3], font=dfont, bg=fbg,fg=ffg)
-    
-    lbl_loc.grid( row=dRow, column=0, padx=5, pady=5, sticky=tk.W)
-    lbl_temp.grid(row=dRow, column=1, padx=5, pady=5, sticky=tk.E)
-    lbl_hum.grid( row=dRow, column=2, padx=5, pady=5, sticky=tk.E)
-    lbl_flag.grid(row=dRow, column=3, padx=5, pady=5, sticky=tk.E)
-    row.pack(side="top")
-    return
-"""
 
 ###############################################################################
 # MQTT functions and display updating
@@ -512,13 +581,11 @@ def subscribe(mqtt: mqtt_client):
         totrecs += 1
         # parse the json payload
         y = json.loads(msg.payload.decode())
-        # Get time in seconds since Epoch for comparison purposes, with 2 sec threshhold
-        eTime = CnvTime(y["time"])
-        # Is this a duplicate record?  Use time+model+id as a fingerprint to tell.
-        # If not a duplicate entry, then process & record; else skip
-        # Some records don't have an "id" field, so just use "model" in those cases
-        # If not a device record, just return
+
+        # Is this a record type that we want to process?
         if "model" not in y:
+            return
+        if noTPMS and "type" in y and y["type"]=="TPMS":
             return
 
         #  Create the device identifier as "model/channel/id"
@@ -528,6 +595,12 @@ def subscribe(mqtt: mqtt_client):
         dev += "/"
         if "id" in y:
             dev += str(y["id"])
+
+        # Convert data values to standard form
+        eTime   = CnvTime(y["time"])
+        freq    = 0.0 if "freq" not in y else float(y["freq"])
+        battery = None if "battery_ok" not in y else y["battery_ok"]
+        status  = None if "status"     not in y else y["status"]
 
         if eTime>lastEntry["time"]+dup_thresh and dev != lastEntry["device"]:
             dedups += 1
@@ -610,58 +683,8 @@ def add_row(dRow):
     return
 
 
-###############################################################################
-# Create the display panels and table section
-"""
-def create_display():    
-    global win, frm_table, dfont, hfont, lfont
-    # Create the main window
-    win = tk.Tk()
-    win.title("Neighborhood Temperatures")
-
-    # Create dynamic font for text
-    hfont = tkFont.Font(size=-36)
-    dfont = tkFont.Font(size=-24)
-    lfont = tkFont.Font(size=-30, weight="bold")
-
-    # Build the title section of the display
-    frm_title = tk.Frame(win, borderwidth=10, relief="groove")
-    frm_title.pack(side="top", fill="x", expand=False)
-    lbl_title = tk.Label(frm_title, text="Display Neighborhood Temperatures",
-                         font=hfont, bg="cornflower blue", fg="white")
-    lbl_title.pack(anchor="center", fill="x")
-
-    # Build the information section
-    frm_info = tk.Frame(win, borderwidth=5, relief="raised")
-    frm_info.pack(side="top", fill="x", expand=False)
-    lbl_monitor = tk.Label(frm_info, text="Monitoring host: %s" % (host), font=dfont)
-    btn_wrst    = tk.Button(frm_info, text="WRst",           width=4, height=1,
-                           font=dfont, fg='green',command=reset_warn)
-    btn_toggle = tk.Button(frm_info, text="Togl",           width=4, height=1,
-                           font=dfont, fg='blue', command=toggle_fullscreen)
-    btn_quit   = tk.Button(frm_info, text="Quit",           width=4,  height=1,
-                           font=dfont, fg='red',  command=quit_prog)
-    lbl_monitor.pack(side="left", padx=2, pady=2)
-    btn_quit.pack(side="right")
-    btn_toggle.pack(side="right")
-    btn_wrst.pack(side="right")
-    
-    # And create the table for data display
-    frm_table = DoubleScrolledFrame(win, width=700, borderwidth=5, relief=tk.GROOVE)
-    frm_table.pack(side="top", fill="both", expand=True, padx=5, pady=5)
-
-    # First, the header
-    add_row(0)
-    tbl[0][0].set("Location or Thermometer")
-    tbl[0][1].set("Temp "+tScale)
-    tbl[0][2].set("%RH")
-    tbl[0][3].set(Warn_Sign)
-
-    # Have <ESC> toggle window, and call resize() every time the window is resized
-    win.bind('<Escape>', toggle_fullscreen)
-    return
-"""
-
+###############################################################################               
+# Create the display panels and table section                                                 
 def create_display():
     global win, frm_table, bfont, dfont, hfont, lfont
     global earliest_time, last_time
@@ -683,16 +706,18 @@ def create_display():
 
     # Build the button menu
     frm_toolbar = tk.Frame(win)
-    frm_toolbar.pack(side="top", fill="x", expand=True)
-    btn_device  = tk.Button(frm_toolbar, text="Sort Device",       command=sortDevice, font=bfont)
-    btn_reccnt  = tk.Button(frm_toolbar, text="Sort Record Count", command=sortRecCnt, font=bfont)
-    btn_snr     = tk.Button(frm_toolbar, text="Sort SNR",          command=sortSnr,    font=bfont)
-    btn_prtsum  = tk.Button(frm_toolbar, text="Print Summary",     command=printsum,   font=bfont, fg="green")
-    btn_stop    = tk.Button(frm_toolbar, text="Quit",              command=quit_prog,  font=bfont, fg="red")
+    frm_toolbar.pack(side="top", fill="x", expand=False)
+    btn_device  = tk.Button(frm_toolbar, text="Sort Device",   command=sortDevice,        font=bfont)
+    btn_reccnt  = tk.Button(frm_toolbar, text="Sort Count",    command=sortRecCnt,        font=bfont)
+    btn_snr     = tk.Button(frm_toolbar, text="Sort SNR",      command=sortSnr,           font=bfont)
+    btn_quit    = tk.Button(frm_toolbar, text="Quit",          command=quit_prog,         font=bfont, fg="red")
+    btn_toggle  = tk.Button(frm_toolbar, text="Togl",          command=toggle_fullscreen, font=bfont, fg='blue')
+    btn_prtsum  = tk.Button(frm_toolbar, text="Print Summary", command=printsum,          font=bfont, fg="green")
     btn_device.pack(side="left")
     btn_reccnt.pack(side="left")
     btn_snr.pack(side="left")
-    btn_stop.pack(side="right")
+    btn_quit.pack(side="right")
+    btn_toggle.pack(side="right")
     btn_prtsum.pack(side="right")
 
     # Build the information section
@@ -716,12 +741,12 @@ def create_display():
     lbl_ftime.pack(side="left", padx=5, pady=5)
 
     # And create the table for data display, column header first
-    frm_table = DoubleScrolledFrame(win, width=1000, relief="groove")
+    frm_table = DoubleScrolledFrame(win, width=1280, relief="groove")
     frm_table.pack(side="top", fill="both", expand=True, padx=5, pady=5)
 
     # And insert the header as the first row
     add_row(0)
-    tbl[0][0].set("Device\nmodel+id")
+    tbl[0][0].set("Device\nmodel/channel/id")
     tbl[0][1].set("Record\nCount")
     tbl[0][2].set("mean\nSNR")
     tbl[0][3].set("SNR\nStd Dev")

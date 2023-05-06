@@ -67,11 +67,11 @@ VERSION="2.0.0"
 class Stats():
 
    def __init__(self, x):
-      self.count = 1
-      self.mean  = x
-      self.std2  = 0.0
-      self.min   = x
-      self.max   = x
+      self.count = 1      # Count of values included in this stat
+      self.mean  = x      # Mean of those values
+      self.std2  = 0.0    # *SQUARE* of standard deviation of the stream of values
+      self.min   = x      # Minimum value observed in the stream
+      self.max   = x      # Maximum value observed in the stream
       
    def append(self,x):
       self.count += 1
@@ -86,23 +86,35 @@ class Stats():
       return (self.count, self.mean, math.sqrt(self.std2), self.min, self.max)
 
 ##########################################################################################
-# Define a class to hold the data for a device and procedures to create, update, access
+# Define a class to hold the data for each device and procedures to create, update, access
+# Data values include:
+#    dev:  The identifier for this device
+#    dRow: Row of the display table at which this device's data should be reported
+#    snr:  Signal-to-noise ratio over all transmissions
+#    ITGT: Inter-Transmission Gap Time (time between transmissions)
+#    Freq: Radio frequency of the packets over all transmissions
+#    PPT:  Packets per transmission
+#    Battery status flag
+#    Status flag that may be reported by the device
+#    Warning level: highest level seen
+#    Warning flag: character used to indicate the current warning level for the device
 class Data:
-    def __init__(self, dRow, eTime, snr, freq, battery, status):
-        self.dRow          = dRow
-        self.pktcount      = 1
-        self.xmtcount      = 0
-        self.pkt_xmt       = 1
-        self.last_pkt_time = eTime
-        self.last_xmt_time = eTime
-        self.battery       = battery
-        self.status        = status
-        self.SNR           = None if omitSNR  else Stats(snr)
-        self.ITGT          = None 
-        self.Freq          = None if omitFreq else Stats(freq)
-        self.PPT           = None 
-        self.wlevel        = Warn.ALARM if battery==0 else Warn.OK
-        self.warn          = Warnings[self.wlevel]
+    def __init__(self, dev, dRow, eTime, snr, freq, battery, status):
+        self.dev           = dev     # This device's identifier
+        self.dRow          = dRow    # Row of the display table where this device should show
+        self.pktcount      = 1       # Number of packets from this device
+        self.xmtcount      = 1       # Number of transmissions from this device
+        self.pkt_xmt       = 1       # Number of packets in this transmission
+        self.last_pkt_time = eTime   # Time stamp of last packet
+        self.last_xmt_time = eTime   # Time stamp of last transmission
+        self.battery       = battery # Battery flag of last transmission
+        self.status        = status  # Status flag of last transmission
+        self.SNR           = None if omitSNR  else Stats(snr)      # Holds stats for snr 
+        self.ITGT          = None                                  # Holds stats for ITGT
+        self.Freq          = None if omitFreq else Stats(freq)     # Holds stats for Freq
+        self.PPT           = None                                  # Holds stats for PPT
+        self.wlevel        = Warn.ALARM if battery==0 else Warn.OK # Records highest warning
+        self.warn          = Warnings[self.wlevel]                 # Display flag for warning
         return
 
     # Update information about this device and return a
@@ -618,7 +630,7 @@ def subscribe(mqtt: mqtt_client):
             dRow = len(tbl)
             if debug:
                 print("Appending new device", dev, " to end of tbl at row", dRow)
-            devices[dev] = Data(dRow, eTime, snr, freq, battery, status)
+            devices[dev] = Data(dev, dRow, eTime, snr, freq, battery, status)
             add_row(dRow)
             dup = False
 

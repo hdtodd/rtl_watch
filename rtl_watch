@@ -173,6 +173,7 @@ client_id = f'python-mqtt-{random.randint(0, 100)}'
 win        = None
 frm_table  = None
 fullscreen = False
+collecting = True    
 bfont      = None
 dfont      = None
 hfont      = None
@@ -408,7 +409,7 @@ def CnvTime(ts):
             err={}
             print("datetime error in input line", lc, "converting time string: ", ts)
             print("datetime  msg:", err.get("error", str(e)))
-            quit()
+            sys.exit(1)
     else:
         try:
             eTime = float(ts)
@@ -416,73 +417,68 @@ def CnvTime(ts):
             err = {}
             print("Datetime conversion failed on line", lc, "with datetime string", ts)
             print("float() error msg:", err.get("error", str(e)))
-            quit()
+            sys.exit(1)
+
     return(eTime)
 
 
 ###############################################################################
 # Button action routines
 def sortDevice():
+    global collecting
     mqtt.loop_stop()
     row = 1
-    for	device in sorted(devices):
-        (cnt,snr,sigma,min,max) = devices[device].get()
-        tbl[row][0].set(device)
-        tbl[row][1].set(cnt)
-        tbl[row][2].set(round(snr,1))
-        tbl[row][3].set(round(sigma,2))
-        tbl[row][4].set(round(min,1))
-        tbl[row][5].set(round(max,1))
+    for	dev in sorted(devices):
+        devices[dev].dRow = row
+        write_display_row_for_device(dev)
         row += 1
 
-    mqtt.loop_start()
+    if collecting:
+        mqtt.loop_start()
     return
 
 def sortRecCnt():
+    global collecting
     mqtt.loop_stop()
     cntlist = {}
-    for device in devices:
-        (cnt,snr,sigma,min,max) = devices[device].get()
-        key = f"{cnt:06}" + device
-        cntlist[key] = device
+    for dev in devices:
+        (pkt,xmt,SNR,ITGT,Freq,PPT) = devices[dev].get()
+        cnt = SNR.count
+        key = f"{cnt:06}" + dev
+        cntlist[key] = dev
     row = 1
     for rec in sorted(cntlist, reverse=True):
-        (cnt,snr,sigma,min,max) = devices[cntlist[rec]].get()
-        tbl[row][0].set(cntlist[rec])
-        tbl[row][1].set(cnt)
-        tbl[row][2].set(round(snr,1))
-        tbl[row][3].set(round(sigma,2))
-        tbl[row][4].set(round(min,1))
-        tbl[row][5].set(round(max,1))
+        devices[cntlist[rec]].dRow = row
+        write_display_row_for_device(devices[cntlist[rec]].dev)
         row += 1
 
-    mqtt.loop_start()    
+    if collecting:
+        mqtt.loop_start()    
     return
 
 def sortSnr():
+    global collecting
     mqtt.loop_stop()
     snrlist = {}
-    for device in devices:
-        (cnt,snr,sigma,min,max) = devices[device].get()
-        key = f"{snr:05.1f}" + device
-        snrlist[key] = device
+    for dev in devices:
+        (pkt,xmt,SNR,ITGT,Freq,PPT) = devices[dev].get()
+        snr = SNR.mean
+        key = f"{snr:05.1f}" + dev
+        snrlist[key] = dev
     row = 1
     for rec in sorted(snrlist, reverse=True):
-        (cnt,snr,sigma,min,max) = devices[cntlist[rec]].get()
-        tbl[row][0].set(snrlist[rec])
-        tbl[row][1].set(cnt)
-        tbl[row][2].set(round(snr,1))
-        tbl[row][3].set(round(sigma,2))
-        tbl[row][4].set(round(min,1))
-        tbl[row][5].set(round(max,1))
+        devices[snrlist[rec]].dRow = row
+        write_display_row_for_device(devices[snrlist[rec]].dev)
         row += 1
 
-    mqtt.loop_start()    
+    if collecting:
+        mqtt.loop_start()    
     return
 
 ###############################################################################
 # Reset device warnings to OK and rewrite the display table accordingly
 def reset_warn():
+    global collecting
     mqtt.loop_stop()
     for dev in devices:
         devices[dev].battery = 1
@@ -490,7 +486,8 @@ def reset_warn():
         devices[dev].warn    = Warnings[Warn.OK]
     for row in range(1, len(tbl)):
         tbl[row][3].set(Warnings[Warn.OK])
-    mqtt.loop_start()
+    if collecting:
+        mqtt.loop_start()
     return
 
 ###############################################################################
@@ -503,7 +500,19 @@ def quit_prog(event=None):
     win.quit()
     sys.exit(0)
 
+def toggle_collecting(event=None):
+    global collecting
+    if collecting:
+        mqtt.loop_stop()
+        print("Data collection paused ...")
+    else:
+        mqtt.loop_start()
+        print("Data collection resumed ...")
+    collecting = not collecting
+    return
+    
 def printsum():
+    global collecting
     global devices
     global dedups, totrecs
     mqtt.loop_stop()
@@ -513,16 +522,37 @@ def printsum():
           "\nLast entry recorded at:  ", last_time.get()) 
     print("Processed ", dedups, " de-duplicated records of a total of ", totrecs, " records")
     print("\n{:<25} {:>8} {:>8} ±{:>5} {:>8} {:>8}".format(
-          "Device", "Rec Cnt", "Mean", "𝜎  ", "Min", "Max"))
-    for device in sorted(devices):
-        (n,avg,std,min,max) = devices[device].get()
-        print("{:<25} {:>8} {:>8.1f} ±{:>5.2f} {:>8.1f} {:>8.1f}".format(device,n,avg,std,min,max))
+          "Device", "Pkt Cnt", "Mean", "𝜎  ", "Min", "Max"))
+    for dev in sorted(devices):
+        (pkt,xmt,SNR,ITGT,Freq,PPT) = devices[dev].get()
+        (n,avg,std,min,max) = SNR.get()
+        print("{:<25} {:>8} {:>8.1f} ±{:>5.2f} {:>8.1f} {:>8.1f}".format(dev,n,avg,std,min,max))
     print("\n____________________________________________________________________")
-    mqtt.loop_start()
+    if collecting:
+        mqtt.loop_start()
 
 ###############################################################################
 # Functions for displaying
 
+# Write the row on the display for device "dev"
+def write_display_row_for_device(dev):
+    global devices, tbl
+    dRow = devices[dev].dRow
+    (pkt,xmt,SNR,ITGT,Freq,PPT) = devices[dev].get()
+    (cnt,snr,sigma,min,max) = SNR.get()
+    try:
+        tbl[dRow][0].set(dev)
+        tbl[dRow][1].set(pkt)
+        tbl[dRow][2].set(xmt)
+        tbl[dRow][3].set(round(snr,1))
+        tbl[dRow][4].set(round(sigma,2))
+        tbl[dRow][5].set(round(min,1))
+        tbl[dRow][6].set(round(max,1))
+    except Exception as e:
+        print("Exception when trying to set display values for row", dRow)
+        print("Exception:", str(e))
+    return
+        
 # Toggle fullscreen
 def toggle_fullscreen(event=None):
     global win
@@ -581,23 +611,6 @@ def subscribe(mqtt: mqtt_client):
         global dedups, totrecs
         global tbl, devnum
 
-        def write_display_row_for_device(dev):
-            dRow = devices[dev].dRow
-            (pkt,xmt,SNR,ITGT,Freq,PPT) = devices[dev].get()
-            (cnt,snr,sigma,min,max) = SNR.get()
-            try:
-                tbl[dRow][0].set(dev)
-                tbl[dRow][1].set(pkt)
-                tbl[dRow][2].set(xmt)
-                tbl[dRow][3].set(round(snr,1))
-                tbl[dRow][4].set(round(sigma,2))
-                tbl[dRow][5].set(round(min,1))
-                tbl[dRow][6].set(round(max,1))
-            except Exception as e:
-                print("Exception when trying to set display values for row", dRow)
-                print("Exception:", str(e))
-            return
-        
         # count this new record
         totrecs += 1
         # parse the json payload
@@ -761,6 +774,8 @@ def create_display():
     tbl[0][6].set("Max\nSNR")
 
     win.bind('<Escape>', toggle_fullscreen)
+    if debug:
+        win.bind('s', toggle_collecting)
     return
 
 #######################################################################################

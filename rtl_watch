@@ -485,7 +485,7 @@ def reset_warn():
         devices[dev].wlevel  = Warn.OK
         devices[dev].warn    = Warnings[Warn.OK]
     for row in range(1, len(tbl)):
-        tbl[row][3].set(Warnings[Warn.OK])
+        tbl[row][1].set(Warnings[Warn.OK])
     if collecting:
         mqtt.loop_start()
     return
@@ -542,12 +542,13 @@ def write_display_row_for_device(dev):
     (cnt,snr,sigma,min,max) = SNR.get()
     try:
         tbl[dRow][0].set(dev)
-        tbl[dRow][1].set(pkt)
-        tbl[dRow][2].set(xmt)
-        tbl[dRow][3].set(round(snr,1))
-        tbl[dRow][4].set(round(sigma,2))
-        tbl[dRow][5].set(round(min,1))
-        tbl[dRow][6].set(round(max,1))
+        tbl[dRow][1].set(devices[dev].warn)
+        tbl[dRow][2].set(pkt)
+        tbl[dRow][3].set(xmt)
+        tbl[dRow][4].set(round(snr,1))
+        tbl[dRow][5].set(round(sigma,2))
+        tbl[dRow][6].set(round(min,1))
+        tbl[dRow][7].set(round(max,1))
     except Exception as e:
         print("Exception when trying to set display values for row", dRow)
         print("Exception:", str(e))
@@ -637,6 +638,15 @@ def subscribe(mqtt: mqtt_client):
         battery = None if "battery_ok" not in y else y["battery_ok"]
         status  = None if "status"     not in y else y["status"]
 
+        # if debuging warnings (-d -W), inject warning conditions at pkts 10, 20
+        if debugW:
+            if pktcnt==10:
+                status = 9
+                print(CSIMGN, "Inserting status-code change for display debugging", CSIBLK)
+            if pktcnt==20:
+                battery = 0
+                print(CSIRED, "Inserting battery-low condition for display debugging", CSIBLK)
+
         if dev in devices:
             dup = devices[dev].update(eTime, snr, freq, battery, status)
         else:
@@ -676,7 +686,7 @@ def add_row(dRow):
     global frm_table, tbl
 
     tbl.append( (tk.StringVar(), tk.StringVar(), tk.StringVar(), tk.StringVar(),
-                 tk.StringVar(), tk.StringVar(), tk.StringVar() ) )
+                 tk.StringVar(), tk.StringVar(), tk.StringVar(), tk.StringVar() ) )
     row = tk.Frame(frm_table)
     # Color the header row differently                                                                               
     if dRow==0:
@@ -685,19 +695,21 @@ def add_row(dRow):
         (bg, fg, fbg, ffg) = ("white", "black", "white", "black")
 
     lbl_device = tk.Label(row, width=30, textvariable=tbl[dRow][0], font=dfont, bg=bg)
-    lbl_pktcnt = tk.Label(row, width=10, textvariable=tbl[dRow][1], font=dfont, bg=bg)
-    lbl_xmtcnt = tk.Label(row, width=10, textvariable=tbl[dRow][2], font=dfont, bg=bg)
-    lbl_snr    = tk.Label(row, width=10, textvariable=tbl[dRow][3], font=dfont, bg=bg)
-    lbl_stdev  = tk.Label(row, width=10, textvariable=tbl[dRow][4], font=dfont, bg=bg)
-    lbl_min    = tk.Label(row, width=10, textvariable=tbl[dRow][5], font=dfont, bg=bg)
-    lbl_max    = tk.Label(row, width=10, textvariable=tbl[dRow][6], font=dfont, bg=bg)
+    lbl_flag   = tk.Label(row, width=1,  textvariable=tbl[dRow][1], font=dfont, bg=fbg, fg=ffg)
+    lbl_pktcnt = tk.Label(row, width=10, textvariable=tbl[dRow][2], font=dfont, bg=bg)
+    lbl_xmtcnt = tk.Label(row, width=10, textvariable=tbl[dRow][3], font=dfont, bg=bg)
+    lbl_snr    = tk.Label(row, width=10, textvariable=tbl[dRow][4], font=dfont, bg=bg)
+    lbl_stdev  = tk.Label(row, width=10, textvariable=tbl[dRow][5], font=dfont, bg=bg)
+    lbl_min    = tk.Label(row, width=10, textvariable=tbl[dRow][6], font=dfont, bg=bg)
+    lbl_max    = tk.Label(row, width=10, textvariable=tbl[dRow][7], font=dfont, bg=bg)
     lbl_device.grid(row=dRow, column=0, padx=2, pady=2, sticky="W")
-    lbl_pktcnt.grid(row=dRow, column=1, padx=2, pady=2, sticky="W")
-    lbl_xmtcnt.grid(row=dRow, column=2, padx=2, pady=2, sticky="W")
-    lbl_snr.grid(   row=dRow, column=3, padx=2, pady=2, sticky="W")
-    lbl_stdev.grid( row=dRow, column=4, padx=2, pady=2, sticky="W")
-    lbl_min.grid(   row=dRow, column=5, padx=2, pady=2, sticky="W")
-    lbl_max.grid(   row=dRow, column=6, padx=2, pady=2, sticky="W")
+    lbl_flag.grid(  row=dRow, column=1, padx=2, pady=2, sticky="W")
+    lbl_pktcnt.grid(row=dRow, column=2, padx=2, pady=2, sticky="W")
+    lbl_xmtcnt.grid(row=dRow, column=3, padx=2, pady=2, sticky="W")
+    lbl_snr.grid(   row=dRow, column=4, padx=2, pady=2, sticky="W")
+    lbl_stdev.grid( row=dRow, column=5, padx=2, pady=2, sticky="W")
+    lbl_min.grid(   row=dRow, column=6, padx=2, pady=2, sticky="W")
+    lbl_max.grid(   row=dRow, column=7, padx=2, pady=2, sticky="W")
     row.pack(side="top")
     return
 
@@ -732,12 +744,14 @@ def create_display():
     btn_quit    = tk.Button(frm_toolbar, text="Quit",          command=quit_prog,         font=bfont, fg="red")
     btn_toggle  = tk.Button(frm_toolbar, text="Togl",          command=toggle_fullscreen, font=bfont, fg='blue')
     btn_prtsum  = tk.Button(frm_toolbar, text="Print Summary", command=printsum,          font=bfont, fg="green")
+    btn_wrst    = tk.Button(frm_toolbar, text="Reset Warn",    command=reset_warn,        font=bfont, bg='yellow', fg='black')
     btn_device.pack(side="left")
     btn_reccnt.pack(side="left")
     btn_snr.pack(side="left")
     btn_quit.pack(side="right")
     btn_toggle.pack(side="right")
     btn_prtsum.pack(side="right")
+    btn_wrst.pack(side="right")
 
     # Build the information section
     frm_info = tk.Frame(win, borderwidth=5, relief="raised")
@@ -766,12 +780,13 @@ def create_display():
     # And insert the header as the first row
     add_row(0)
     tbl[0][0].set("Device\nmodel/channel/id")
-    tbl[0][1].set("Pkt\nCount")
-    tbl[0][2].set("Xmit\nCount")
-    tbl[0][3].set("Mean\nSNR")
-    tbl[0][4].set("SNR\nStd Dev")
-    tbl[0][5].set("Min\nSNR")
-    tbl[0][6].set("Max\nSNR")
+    tbl[0][1].set(Warn_Sign)
+    tbl[0][2].set("Pkt\nCount")
+    tbl[0][3].set("Xmit\nCount")
+    tbl[0][4].set("Mean\nSNR")
+    tbl[0][5].set("SNR\nStd Dev")
+    tbl[0][6].set("Min\nSNR")
+    tbl[0][7].set("Max\nSNR")
 
     win.bind('<Escape>', toggle_fullscreen)
     if debug:

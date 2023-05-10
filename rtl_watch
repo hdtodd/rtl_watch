@@ -172,6 +172,7 @@ client_id = f'python-mqtt-{random.randint(0, 100)}'
 # Variables and constants used globally
 win        = None
 frm_table  = None
+tbl_width  = 0
 fullscreen = False
 collecting = True    
 bfont      = None
@@ -328,7 +329,7 @@ def make_parser():
 # Set execution parameters from cmdline
 def set_params():
     global host, topic, username, password, port, useF, tScale, debug, debugW
-    global dup_thresh
+    global dup_thresh, tbl_width
     
     args = make_parser()
 
@@ -379,6 +380,15 @@ def set_params():
     noTPMS   = not args.include_TPMS
     if args.window is not None:
         dup_thresh = args.window
+    tbl_width = 4
+    if not omitSNR:
+        tbl_width +=4
+    if not omitITGT:
+        tbl_width +=2
+    if not omitFreq:
+        tbl_width +=2
+    if not omitPPT:
+        tbl_width +=2
 
     if debug:
         print("Debug is ON")
@@ -390,12 +400,12 @@ def set_params():
         print("\tMQTT port:    ", port)
         print("\tUseF:         ", useF)
         print("\tDebug warnings", debugW)
-        print("\tIncluding" if not omitSNR  else "Excluding", "SNR Stats")
-        print("\tIncluding" if not omitITGT else "Excluding", "ITGT Stats")
-        print("\tIncluding" if not omitFreq else "Excluding", "Freq Stats")
-        print("\tExcluding" if     noTPMS   else "Including", "TPMS devices")
+        print("\tIncluding" if not omitSNR  else "\tExcluding", "SNR Stats")
+        print("\tIncluding" if not omitITGT else "\tExcluding", "ITGT Stats")
+        print("\tIncluding" if not omitFreq else "\tExcluding", "Freq Stats")
+        print("\tExcluding" if     noTPMS   else "\tIncluding", "TPMS devices")
         print("\tUsing transmission window of", dup_thresh)
-
+        print("\tDisplay table width will be", tbl_width, "columns")
     return
 
 
@@ -683,16 +693,15 @@ def subscribe(mqtt: mqtt_client):
 # Format the widgets, and handle row 0 differently as it is the header                                               
 # Widget values get filled in by "main" (for header) or "on_message" (for data values) 
 def add_row(dRow):
-    global frm_table, tbl
+    global frm_table, tbl, tbl_width
 
-    tbl.append( (tk.StringVar(), tk.StringVar(), tk.StringVar(), tk.StringVar(),
-                 tk.StringVar(), tk.StringVar(), tk.StringVar(), tk.StringVar() ) )
+    tbl.append( tuple(tk.StringVar() for i in range(tbl_width) ) )
     row = tk.Frame(frm_table)
     # Color the header row differently                                                                               
     if dRow==0:
         (bg, fg, fbg, ffg) = ("cornflower blue", "white", "yellow", "black")
     else:
-        (bg, fg, fbg, ffg) = ("white", "black", "white", "black")
+        (bg, fg, fbg, ffg) = ("white",           "black", "white",  "black")
 
     lbl_device = tk.Label(row, width=30, textvariable=tbl[dRow][0], font=dfont, bg=bg)
     lbl_flag   = tk.Label(row, width=1,  textvariable=tbl[dRow][1], font=dfont, bg=fbg, fg=ffg)

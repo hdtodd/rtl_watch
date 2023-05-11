@@ -330,6 +330,7 @@ def make_parser():
 def set_params():
     global host, topic, username, password, port, useF, tScale, debug, debugW
     global dup_thresh, tbl_width
+    global omitSNR, omitITGT, omitFreq, omitPPT
     
     args = make_parser()
 
@@ -382,7 +383,7 @@ def set_params():
         dup_thresh = args.window
     tbl_width = 4
     if not omitSNR:
-        tbl_width +=4
+        tbl_width +=2
     if not omitITGT:
         tbl_width +=2
     if not omitFreq:
@@ -547,6 +548,7 @@ def printsum():
 # Write the row on the display for device "dev"
 def write_display_row_for_device(dev):
     global devices, tbl
+    global omitSNR, omitITGT, omitFreq, omitPPT
     dRow = devices[dev].dRow
     (pkt,xmt,SNR,ITGT,Freq,PPT) = devices[dev].get()
     (cnt,snr,sigma,min,max) = SNR.get()
@@ -555,10 +557,25 @@ def write_display_row_for_device(dev):
         tbl[dRow][1].set(devices[dev].warn)
         tbl[dRow][2].set(pkt)
         tbl[dRow][3].set(xmt)
-        tbl[dRow][4].set(round(snr,1))
-        tbl[dRow][5].set(round(sigma,2))
-        tbl[dRow][6].set(round(min,1))
-        tbl[dRow][7].set(round(max,1))
+        col = 4
+        if not omitSNR:
+            tbl[dRow][col].set(round(snr,1))
+            tbl[dRow][col+1].set(round(sigma,2))
+            col += 2
+        if not omitITGT and ITGT is not None:
+            (cnt,itgt,sigma,min,max) = ITGT.get()
+            tbl[dRow][col].set(round(itgt,1))
+            tbl[dRow][col+1].set(round(sigma,2))
+            col += 2
+        if not omitFreq:
+            (cnt,freq,sigma,min,max) = Freq.get()
+            tbl[dRow][col].set(round(freq,3))
+            tbl[dRow][col+1].set(round(sigma,3))
+            col += 2
+        if not omitPPT and PPT is not None:
+            (cnt,ppt,sigma,min,max) = PPT.get()
+            tbl[dRow][col].set(round(ppt,1))
+            tbl[dRow][col+1].set(round(sigma,2))
     except Exception as e:
         print("Exception when trying to set display values for row", dRow)
         print("Exception:", str(e))
@@ -694,7 +711,8 @@ def subscribe(mqtt: mqtt_client):
 # Widget values get filled in by "main" (for header) or "on_message" (for data values) 
 def add_row(dRow):
     global frm_table, tbl, tbl_width
-
+    global omitSNR, omitITGT, omitFreq, omitPPT
+    
     tbl.append( tuple(tk.StringVar() for i in range(tbl_width) ) )
     row = tk.Frame(frm_table)
     # Color the header row differently                                                                               
@@ -707,18 +725,36 @@ def add_row(dRow):
     lbl_flag   = tk.Label(row, width=1,  textvariable=tbl[dRow][1], font=dfont, bg=fbg, fg=ffg)
     lbl_pktcnt = tk.Label(row, width=10, textvariable=tbl[dRow][2], font=dfont, bg=bg)
     lbl_xmtcnt = tk.Label(row, width=10, textvariable=tbl[dRow][3], font=dfont, bg=bg)
-    lbl_snr    = tk.Label(row, width=10, textvariable=tbl[dRow][4], font=dfont, bg=bg)
-    lbl_stdev  = tk.Label(row, width=10, textvariable=tbl[dRow][5], font=dfont, bg=bg)
-    lbl_min    = tk.Label(row, width=10, textvariable=tbl[dRow][6], font=dfont, bg=bg)
-    lbl_max    = tk.Label(row, width=10, textvariable=tbl[dRow][7], font=dfont, bg=bg)
     lbl_device.grid(row=dRow, column=0, padx=2, pady=2, sticky="W")
     lbl_flag.grid(  row=dRow, column=1, padx=2, pady=2, sticky="W")
     lbl_pktcnt.grid(row=dRow, column=2, padx=2, pady=2, sticky="W")
     lbl_xmtcnt.grid(row=dRow, column=3, padx=2, pady=2, sticky="W")
-    lbl_snr.grid(   row=dRow, column=4, padx=2, pady=2, sticky="W")
-    lbl_stdev.grid( row=dRow, column=5, padx=2, pady=2, sticky="W")
-    lbl_min.grid(   row=dRow, column=6, padx=2, pady=2, sticky="W")
-    lbl_max.grid(   row=dRow, column=7, padx=2, pady=2, sticky="W")
+    col = 4
+    if not omitSNR:
+        lbl_snr    = tk.Label(row, width=10, textvariable=tbl[dRow][col],   font=dfont, bg=bg)
+        lbl_snr𝜎   = tk.Label(row, width=10, textvariable=tbl[dRow][col+1], font=dfont, bg=bg)
+        lbl_snr.grid( row=dRow, column=col,   padx=2, pady=2, sticky="W")
+        lbl_snr𝜎.grid(row=dRow, column=col+1, padx=2, pady=2, sticky="W")
+        col += 2
+    if not omitITGT:
+        lbl_itgt    = tk.Label(row, width=10, textvariable=tbl[dRow][col],   font=dfont, bg=bg)
+        lbl_itgt𝜎   = tk.Label(row, width=10, textvariable=tbl[dRow][col+1], font=dfont, bg=bg)
+        lbl_itgt.grid( row=dRow, column=col,   padx=2, pady=2, sticky="W")
+        lbl_itgt𝜎.grid(row=dRow, column=col+1, padx=2, pady=2, sticky="W")
+        col += 2
+    if not omitFreq:
+        lbl_freq    = tk.Label(row, width=10, textvariable=tbl[dRow][col],   font=dfont, bg=bg)
+        lbl_freq𝜎   = tk.Label(row, width=10, textvariable=tbl[dRow][col+1], font=dfont, bg=bg)
+        lbl_freq.grid( row=dRow, column=col,   padx=2, pady=2, sticky="W")
+        lbl_freq𝜎.grid(row=dRow, column=col+1, padx=2, pady=2, sticky="W")
+        col += 2
+    if not omitPPT:
+        lbl_ppt    = tk.Label(row, width=10, textvariable=tbl[dRow][col],   font=dfont, bg=bg)
+        lbl_ppt𝜎   = tk.Label(row, width=10, textvariable=tbl[dRow][col+1], font=dfont, bg=bg)
+        lbl_ppt.grid( row=dRow, column=col,   padx=2, pady=2, sticky="W")
+        lbl_ppt𝜎.grid(row=dRow, column=col+1, padx=2, pady=2, sticky="W")
+        col += 2
+
     row.pack(side="top")
     return
 
@@ -728,6 +764,7 @@ def add_row(dRow):
 def create_display():
     global win, frm_table, bfont, dfont, hfont, lfont
     global earliest_time, last_time
+    global omitSNR, omitITGT, omitFreq, omitPPT
     
     # Create the main window and dynamic fonts
     win = tk.Tk()
@@ -747,13 +784,20 @@ def create_display():
     # Build the button menu
     frm_toolbar = tk.Frame(win)
     frm_toolbar.pack(side="top", fill="x", expand=False)
-    btn_device  = tk.Button(frm_toolbar, text="Sort Device",   command=sortDevice,        font=bfont)
-    btn_reccnt  = tk.Button(frm_toolbar, text="Sort Count",    command=sortRecCnt,        font=bfont)
-    btn_snr     = tk.Button(frm_toolbar, text="Sort SNR",      command=sortSnr,           font=bfont)
-    btn_quit    = tk.Button(frm_toolbar, text="Quit",          command=quit_prog,         font=bfont, fg="red")
-    btn_toggle  = tk.Button(frm_toolbar, text="Togl",          command=toggle_fullscreen, font=bfont, fg='blue')
-    btn_prtsum  = tk.Button(frm_toolbar, text="Print Summary", command=printsum,          font=bfont, fg="green")
-    btn_wrst    = tk.Button(frm_toolbar, text="Reset Warn",    command=reset_warn,        font=bfont, bg='yellow', fg='black')
+    btn_device  = tk.Button(frm_toolbar, text="Sort Device",   command=sortDevice,
+                            relief="raised", font=bfont)
+    btn_reccnt  = tk.Button(frm_toolbar, text="Sort Count",    command=sortRecCnt,
+                            relief="raised", font=bfont)
+    btn_snr     = tk.Button(frm_toolbar, text="Sort SNR",      command=sortSnr,
+                            relief="raised", font=bfont)
+    btn_quit    = tk.Button(frm_toolbar, text="Quit",          command=quit_prog,
+                            relief="raised", font=bfont, fg="red")
+    btn_toggle  = tk.Button(frm_toolbar, text="Togl",          command=toggle_fullscreen,
+                            relief="raised", font=bfont, fg='blue')
+    btn_prtsum  = tk.Button(frm_toolbar, text="Print Summary", command=printsum,
+                            relief="raised", font=bfont, fg="green")
+    btn_wrst    = tk.Button(frm_toolbar, text="Reset Warn",    command=reset_warn,
+                            relief="raised", font=bfont, bg='yellow', fg='black')
     btn_device.pack(side="left")
     btn_reccnt.pack(side="left")
     btn_snr.pack(side="left")
@@ -792,10 +836,24 @@ def create_display():
     tbl[0][1].set(Warn_Sign)
     tbl[0][2].set("Pkt\nCount")
     tbl[0][3].set("Xmit\nCount")
-    tbl[0][4].set("Mean\nSNR")
-    tbl[0][5].set("SNR\nStd Dev")
-    tbl[0][6].set("Min\nSNR")
-    tbl[0][7].set("Max\nSNR")
+    col = 4
+    if not omitSNR:
+        tbl[0][col].set("SNR\nMean")
+        tbl[0][col+1].set("SNR\n𝜎")
+        col += 2
+#    tbl[0][6].set("Min\nSNR")
+#    tbl[0][7].set("Max\nSNR")
+    if not omitITGT:
+        tbl[0][col].set("ITGT\nMean")
+        tbl[0][col+1].set("ITGT\n𝜎")
+        col += 2
+    if not omitFreq:
+        tbl[0][col].set("Freq\nMean")
+        tbl[0][col+1].set("Freq\n𝜎")
+        col += 2
+    if not omitPPT:
+        tbl[0][col].set("PPT\nMean")
+        tbl[0][col+1].set("PPT\n𝜎")
 
     win.bind('<Escape>', toggle_fullscreen)
     if debug:

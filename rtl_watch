@@ -54,8 +54,8 @@ except ImportError:
     import Tkinter.messagebox
 
 AP_DESCRIPTION="""
-DNT:  Real-time monitor for ISM-band device transmissions
-      as observed and published via MQTT by rtl_433.
+rtl_433_watch:  Real-time monitor for ISM-band device transmissions
+                as observed and published via MQTT by rtl_433.
 """
 
 AP_EPILOG="""
@@ -174,6 +174,7 @@ client_id = f'python-mqtt-{random.randint(0, 100)}'
 # Variables and constants used globally
 win        = None
 frm_table  = None
+grp_cnt    = 0
 tbl_width  = 0
 fullscreen = False
 collecting = True    
@@ -315,14 +316,7 @@ def make_parser():
                         nargs="+")
     parser.add_argument("-d", "--debug", dest="debug", action="store_true")
     parser.add_argument("-W", "--warn", dest="warn", action="store_true",
-                        help="Insert warnings at pkts 20 & 40 to debug; requires -d")
-    specifyTemp = parser.add_mutually_exclusive_group()
-    specifyTemp.add_argument("-C", "--Celsius", dest="degC",
-                             action="store_true", default=False,
-                             help="Display temperatures in Celsius (default is Fahrenheit)")
-    specifyTemp.add_argument("-F", "--Fahrenheit", dest="degC", action="store_false",
-                             default=True,
-                             help="Display temperatures in Fahrenheit (default)")
+                        help="Inject warnings at pkts 20 & 40 to debug; requires -d")
     parser.add_argument("-v", "--version", action="version", version=VERSION)
     args = parser.parse_args()
     return args
@@ -330,8 +324,8 @@ def make_parser():
 ###############################################################################
 # Set execution parameters from cmdline
 def set_params():
-    global host, topic, username, password, port, useF, tScale, debug, debugW
-    global dup_thresh, tbl_width
+    global host, topic, username, password, port, debug, debugW
+    global dup_thresh, tbl_width, grp_cnt
     global omitSNR, omitITGT, omitFreq, omitPPT
     
     args = make_parser()
@@ -367,8 +361,6 @@ def set_params():
     if not args.port and 'MQTT_PORT' in os.environ:
         args.port = os.environ['MQTT_PORT']
 
-    useF     = False if args.degC is not None and args.degC else True
-    tScale   = "°F" if useF else "°C"
     host     = args.host
     topic    = args.topic
     username = args.username
@@ -383,15 +375,11 @@ def set_params():
     noTPMS   = not args.include_TPMS
     if args.window is not None:
         dup_thresh = args.window
-    tbl_width = 4
-    if not omitSNR:
-        tbl_width +=2
-    if not omitITGT:
-        tbl_width +=2
-    if not omitFreq:
-        tbl_width +=2
-    if not omitPPT:
-        tbl_width +=2
+    grp_cnt  = 1 if not omitSNR  else 0;
+    grp_cnt += 1 if not omitFreq else 0;
+    grp_cnt += 1 if not omitITGT else 0;
+    grp_cnt += 1 if not omitPPT  else 0;
+    tbl_width = 4 + 2*grp_cnt
 
     if debug:
         print("Debug is ON")
@@ -401,7 +389,6 @@ def set_params():
         print("\tMQTT username:", username)
         print("\tMQTT password:", password)
         print("\tMQTT port:    ", port)
-        print("\tUseF:         ", useF)
         print("\tDebug warnings", debugW)
         print("\tIncluding" if not omitSNR  else "\tExcluding", "SNR Stats")
         print("\tIncluding" if not omitITGT else "\tExcluding", "ITGT Stats")
@@ -420,7 +407,7 @@ def CnvTime(ts):
             eTime = datetime.datetime.fromisoformat(ts).timestamp()
         except ValueError as e:
             err={}
-            print("datetime error in input line", lc, "converting time string: ", ts)
+            print("datetime error in input line converting time string: ", ts)
             print("datetime  msg:", err.get("error", str(e)))
             sys.exit(1)
     else:
@@ -428,7 +415,7 @@ def CnvTime(ts):
             eTime = float(ts)
         except ValueError as e:
             err = {}
-            print("Datetime conversion failed on line", lc, "with datetime string", ts)
+            print("Datetime conversion failed on line with datetime string", ts)
             print("float() error msg:", err.get("error", str(e)))
             sys.exit(1)
 
@@ -540,67 +527,66 @@ def print_summary():
     global collecting
     global devices
     global dedups, totrecs
-    global omitSNR, omitFreq, omitITGT, omitPPT
+    global grp_cnt, omitSNR, omitFreq, omitITGT, omitPPT
     mqtt.loop_stop()
-    ruler = 48
-    ruler += 18 if not omitSNR  else 0
-    ruler += 18 if not omitFreq else 0
-    ruler += 18 if not omitITGT else 0
-    ruler += 18 if not omitPPT  else 0
-    print("\n{:<120}".format("-"*ruler))
-    print("rtl_watch: Printing summary of recorded rtl_433 packets\n")
-    print("Monitoring host", host, "topic", topic)
-    print("First entry recorded at:", earliest_time.get(),
-          "\tLast entry recorded at:", last_time.get()) 
-    print("Processed", dedups, "de-duplicated transmissions of a total of", totrecs, "packets")
-    
-    print("\n{:>48}".format(" "), end="")
-    if not omitSNR:
-        print("{:>18} ".format("Signal-to-Noise"), end="")
-    if not omitFreq:
-        print("{:^18} ".format("  Frequency"), end="")
-    if not omitITGT:
-        print("{:^18} ".format("ITGT (sec)"), end="")
-    if not omitPPT:
-        print("{:^18}".format("PPT"), end="")
-    print("\n{:>48}  ".format(" "), end="")
-    if not omitSNR:
-        print("{:>16}    ".format("-"*15), end="")
-    if not omitFreq:
-        print("{:^15}   ".format("-"*15), end="")
-    if not omitITGT:
-        print("{:^15}   ".format("-"*15), end="")
-    if not omitPPT:
-        print("{:^14}   ".format("-"*14), end="")
-    print()
-    print("{:<30} {:>8} {:>8}".format("Device", "Pkts", "Xmits"), end="")
-    if not omitSNR:
-        print("   {:>8} ±{:>5}".format("Mean", "𝜎  "), end="")
-    if not omitFreq:
-        print("   {:>8} ±{:>5}".format("Mean", "𝜎  "), end="")
-    if not omitITGT:
-        print("   {:>8} ±{:>5}".format("Mean", "𝜎  "), end="")
-    if not omitPPT:
-        print("   {:>8} ±{:>5}".format("Mean", "𝜎  "), end="")
-    print()
-    for dev in sorted(devices):
-        (pkt,xmt,SNR,ITGT,Freq,PPT) = devices[dev].get()
-        print("{:<30} {:>8d} {:>8d}".format(dev,pkt,xmt), end="")
-        if not omitSNR:
-            (n,avg,std,min,max) = SNR.get()
-            print("   {:>8.1f} ±{:>5.2f}".format(avg,std), end="")
-        if not omitFreq:
-            (n,avg,std,min,max) = Freq.get()
-            print("   {:>8.3f} ± {:>5.3f}".format(avg,std), end="")
-        if not omitITGT and ITGT is not None:
-            (n,avg,std,min,max) = ITGT.get()
-            print("  {:>8.1f} ±{:>5.2f}".format(avg,std), end="")
-        if not omitPPT and PPT is not None:
-            (n,avg,std,min,max) = PPT.get()
-            print("   {:>8.1f} ±{:>5.2f}".format(avg,std), end="")
-        print()
-    print("\n{:<120}".format("-"*ruler))
+    ruler = 48 + 18*grp_cnt
+    fn = f'rtl-watch-{random.randint(0, 1000)}.prn'
+    with open(fn, 'a') as f:
+        print("\n{:<120}".format("-"*ruler), file=f)
+        print("rtl_watch: Printing summary of recorded rtl_433 packets\n", file=f)
+        print("Monitoring host", host, "topic", topic, file=f)
+        print("First entry recorded at:", earliest_time.get(),
+              "\tLast entry recorded at:", last_time.get(), file=f) 
+        print("Processed", dedups, "de-duplicated transmissions of a total of", totrecs, "packets", file=f)
 
+        print("\n{:>48}".format(" "), end="", file=f)
+        if not omitSNR:
+            print("{:>18} ".format("Signal-to-Noise"), end="", file=f)
+        if not omitFreq:
+            print("{:^18} ".format("  Frequency"), end="", file=f)
+        if not omitITGT:
+            print("{:^18} ".format("ITGT (sec)"), end="", file=f)
+        if not omitPPT:
+            print("{:^18}".format("PPT"), end="", file=f)
+        print("\n{:>48}  ".format(" "), end="", file=f)
+        if not omitSNR:
+            print("{:>16}    ".format("-"*15), end="", file=f)
+        if not omitFreq:
+            print("{:^15}   ".format("-"*15), end="", file=f)
+        if not omitITGT:
+            print("{:^15}   ".format("-"*15), end="", file=f)
+        if not omitPPT:
+            print("{:^14}   ".format("-"*14), end="", file=f)
+        print(file=f)
+        print("{:<30} {:>8} {:>8}".format("Device", "Pkts", "Xmits"), end="", file=f)
+        if not omitSNR:
+            print("   {:>8} ±{:>5}".format("Mean", "𝜎  "), end="", file=f)
+        if not omitFreq:
+            print("   {:>8} ±{:>5}".format("Mean", "𝜎  "), end="", file=f)
+        if not omitITGT:
+            print("   {:>8} ±{:>5}".format("Mean", "𝜎  "), end="", file=f)
+        if not omitPPT:
+            print("   {:>8} ±{:>5}".format("Mean", "𝜎  "), end="", file=f)
+        print(file=f)
+        for dev in sorted(devices):
+            (pkt,xmt,SNR,ITGT,Freq,PPT) = devices[dev].get()
+            print("{:<30} {:>8d} {:>8d}".format(dev,pkt,xmt), end="", file=f)
+            if not omitSNR:
+                (n,avg,std,min,max) = SNR.get()
+                print("   {:>8.1f} ±{:>5.2f}".format(avg,std), end="", file=f)
+            if not omitFreq:
+                (n,avg,std,min,max) = Freq.get()
+                print("   {:>8.3f} ± {:>5.3f}".format(avg,std), end="", file=f)
+            if not omitITGT and ITGT is not None:
+                (n,avg,std,min,max) = ITGT.get()
+                print("  {:>8.1f} ±{:>5.2f}".format(avg,std), end="", file=f)
+            if not omitPPT and PPT is not None:
+                (n,avg,std,min,max) = PPT.get()
+                print("   {:>8.1f} ±{:>5.2f}".format(avg,std), end="", file=f)
+            print(file=f)
+        print("\n{:<120}".format("-"*ruler), file=f)
+    print("rtl_433_watch summary table written to file", fn)
+    
     if collecting:
         mqtt.loop_start()
     return
@@ -723,7 +709,7 @@ def subscribe(mqtt: mqtt_client):
 
         # Convert data values to standard form
         eTime   = CnvTime(y["time"])
-        snr     = 0.0 if not ('snr' in y) else float(y['snr'])
+        snr     = 0.0 if "snr"  not in y else float(y['snr'])
         freq    = 0.0 if "freq" not in y else float(y["freq"])
         battery = None if "battery_ok" not in y else y["battery_ok"]
         status  = None if "status"     not in y else y["status"]
@@ -881,10 +867,8 @@ def create_display():
     last_time.set(t.strftime('%Y-%m-%d %H:%M:%S'))
     lbl_monitor = tk.Label(frm_info, text="Monitoring host: %s and topic: %s" % (host, topic), font=dfont)
     lbl_monitor.pack(side="top", padx=5, pady=5)
-    #lbl_first = tk.Label(frm_info, text="Earliest record:\n%s" % earliest_time, font=dfont)
     lbl_first = tk.Label(frm_info, text="Earliest record:", font=dfont)
     lbl_first.pack(side="left", padx=5, pady=5)
-    #lbl_last = tk.Label(frm_info, text="Latest record:\n%s" % last_time, font=dfont)
     lbl_ltime = tk.Label(frm_info, textvariable=last_time,     font=dfont)
     lbl_ltime.pack(side="right", padx=5, pady=5)
     lbl_last = tk.Label(frm_info, text="Latest record:",    font=dfont)
@@ -948,9 +932,9 @@ if __name__ == "__main__":
     # Create the display
     create_display()
 
-    # Connect to the mqtt host and subscribe to the feed.                                                              # This activates the on_message procedure in which 
+    # Connect to the mqtt host and subscribe to the feed.
+    # This activates the on_message procedure in which
     #   MQTT events cause the displayed values to be updated
-    
     mqtt = connect_mqtt()
     mqtt.loop_start()
 

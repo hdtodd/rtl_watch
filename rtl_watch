@@ -742,9 +742,12 @@ def subscribe(mqtt: mqtt_client):
                 earliest_time.set( y["time"])
                 first_rec = False
             last_time.set(y["time"])
-
+            
             write_display_row_for_device(dev)
-            return #Fron on_message
+
+        pkt_cnt.set(totrecs)
+        xmt_cnt.set(dedups)
+        return #Fron on_message
         
     mqtt.subscribe(topic)
     mqtt.on_message = on_message
@@ -812,7 +815,8 @@ def add_row(dRow):
 # Create the display panels and table section                                                 
 def create_display():
     global win, frm_table, bfont, dfont, hfont, lfont
-    global earliest_time, last_time
+    global earliest_time, last_time, pkt_cnt, xmt_cnt
+    global totrecs, dedups
     global omitSNR, omitITGT, omitFreq, omitPPT
     
     # Create the main window and dynamic fonts
@@ -865,16 +869,28 @@ def create_display():
     earliest_time.set(t.strftime('%Y-%m-%d %H:%M:%S'))
     last_time = tk.StringVar()
     last_time.set(t.strftime('%Y-%m-%d %H:%M:%S'))
+    pkt_cnt = tk.StringVar()
+    pkt_cnt.set(totrecs)
+    xmt_cnt = tk.StringVar()
+    xmt_cnt.set(dedups)
     lbl_monitor = tk.Label(frm_info, text="Monitoring host: %s and topic: %s" % (host, topic), font=dfont)
     lbl_monitor.pack(side="top", padx=5, pady=5)
-    lbl_first = tk.Label(frm_info, text="Earliest record:", font=dfont)
-    lbl_first.pack(side="left", padx=5, pady=5)
+    lbl_pkt = tk.Label(frm_info, text="Total pkts received:", font=dfont)
+    lbl_pkt.pack(side="left", padx=5, pady=5)
+    lbl_pcnt = tk.Label(frm_info, textvariable=pkt_cnt, font=dfont)
+    lbl_pcnt.pack(side="left", padx=5, pady=5)
+    lbl_xmt = tk.Label(frm_info, text="Total xmits received:", font=dfont)
+    lbl_xmt.pack(side="left", padx=5, pady=5)
+    lbl_xcnt = tk.Label(frm_info, textvariable=xmt_cnt, font=dfont)
+    lbl_xcnt.pack(side="left", padx=5, pady=5)
     lbl_ltime = tk.Label(frm_info, textvariable=last_time,     font=dfont)
     lbl_ltime.pack(side="right", padx=5, pady=5)
     lbl_last = tk.Label(frm_info, text="Latest record:",    font=dfont)
     lbl_last.pack(side="right", padx=5, pady=5)
     lbl_ftime = tk.Label(frm_info, textvariable=earliest_time, font=dfont)
-    lbl_ftime.pack(side="left", padx=5, pady=5)
+    lbl_ftime.pack(side="right", padx=5, pady=5)
+    lbl_first = tk.Label(frm_info, text="Earliest record:", font=dfont)
+    lbl_first.pack(side="right", padx=5, pady=5)
 
     # And create the table for data display, column header first
     frm_table = DoubleScrolledFrame(win, width=1280, relief="groove")

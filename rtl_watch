@@ -46,10 +46,12 @@ try:
     import tkinter as tk
     from tkinter import ttk
     import tkinter.font as tkFont
+    import tkinter.messagebox
 except ImportError:
     import Tkinter as tk
     import ttk
     import Tkinter.font as tkFont
+    import Tkinter.messagebox
 
 AP_DESCRIPTION="""
 DNT:  Real-time monitor for ISM-band device transmissions
@@ -502,6 +504,18 @@ def reset_warn():
     return
 
 ###############################################################################
+# Pop up an info box with descriptions of the headings
+def legend():
+    explain = (
+    "SNR: Signal-to-Noise Ratio of received radio signals\n\n"
+    "Freq: Radio frequency of signal received\n\n"
+    "ITGT: Inter-Transmission Gap Time (seconds between transmissions)\n\n"
+    "PPT: Packets-Per-Transmission")
+
+    tk.messagebox.showinfo(title="Headings Legend", message=explain)
+    return
+
+###############################################################################
 # CNTL-C and QUIT button handler
 def quit_prog(event=None):
     mqtt.loop_stop()
@@ -522,25 +536,74 @@ def toggle_collecting(event=None):
     collecting = not collecting
     return
     
-def printsum():
+def print_summary():
     global collecting
     global devices
     global dedups, totrecs
+    global omitSNR, omitFreq, omitITGT, omitPPT
     mqtt.loop_stop()
-    print("\n____________________________________________________________________")
-    print("\n\nrtl_watch: Printing summary of recorded rtl_433 packets\n")
-    print("First entry recorded at: ", earliest_time.get(),
-          "\nLast entry recorded at:  ", last_time.get()) 
-    print("Processed ", dedups, " de-duplicated records of a total of ", totrecs, " records")
-    print("\n{:<25} {:>8} {:>8} ±{:>5} {:>8} {:>8}".format(
-          "Device", "Pkt Cnt", "Mean", "𝜎  ", "Min", "Max"))
+    ruler = 48
+    ruler += 18 if not omitSNR  else 0
+    ruler += 18 if not omitFreq else 0
+    ruler += 18 if not omitITGT else 0
+    ruler += 18 if not omitPPT  else 0
+    print("\n{:<120}".format("-"*ruler))
+    print("rtl_watch: Printing summary of recorded rtl_433 packets\n")
+    print("Monitoring host", host, "topic", topic)
+    print("First entry recorded at:", earliest_time.get(),
+          "\tLast entry recorded at:", last_time.get()) 
+    print("Processed", dedups, "de-duplicated transmissions of a total of", totrecs, "packets")
+    
+    print("\n{:>48}".format(" "), end="")
+    if not omitSNR:
+        print("{:>18} ".format("Signal-to-Noise"), end="")
+    if not omitFreq:
+        print("{:^18} ".format("  Frequency"), end="")
+    if not omitITGT:
+        print("{:^18} ".format("ITGT (sec)"), end="")
+    if not omitPPT:
+        print("{:^18}".format("PPT"), end="")
+    print("\n{:>48}  ".format(" "), end="")
+    if not omitSNR:
+        print("{:>16}    ".format("-"*15), end="")
+    if not omitFreq:
+        print("{:^15}   ".format("-"*15), end="")
+    if not omitITGT:
+        print("{:^15}   ".format("-"*15), end="")
+    if not omitPPT:
+        print("{:^14}   ".format("-"*14), end="")
+    print()
+    print("{:<30} {:>8} {:>8}".format("Device", "Pkts", "Xmits"), end="")
+    if not omitSNR:
+        print("   {:>8} ±{:>5}".format("Mean", "𝜎  "), end="")
+    if not omitFreq:
+        print("   {:>8} ±{:>5}".format("Mean", "𝜎  "), end="")
+    if not omitITGT:
+        print("   {:>8} ±{:>5}".format("Mean", "𝜎  "), end="")
+    if not omitPPT:
+        print("   {:>8} ±{:>5}".format("Mean", "𝜎  "), end="")
+    print()
     for dev in sorted(devices):
         (pkt,xmt,SNR,ITGT,Freq,PPT) = devices[dev].get()
-        (n,avg,std,min,max) = SNR.get()
-        print("{:<25} {:>8} {:>8.1f} ±{:>5.2f} {:>8.1f} {:>8.1f}".format(dev,n,avg,std,min,max))
-    print("\n____________________________________________________________________")
+        print("{:<30} {:>8d} {:>8d}".format(dev,pkt,xmt), end="")
+        if not omitSNR:
+            (n,avg,std,min,max) = SNR.get()
+            print("   {:>8.1f} ±{:>5.2f}".format(avg,std), end="")
+        if not omitFreq:
+            (n,avg,std,min,max) = Freq.get()
+            print("   {:>8.3f} ± {:>5.3f}".format(avg,std), end="")
+        if not omitITGT and ITGT is not None:
+            (n,avg,std,min,max) = ITGT.get()
+            print("  {:>8.1f} ±{:>5.2f}".format(avg,std), end="")
+        if not omitPPT and PPT is not None:
+            (n,avg,std,min,max) = PPT.get()
+            print("   {:>8.1f} ±{:>5.2f}".format(avg,std), end="")
+        print()
+    print("\n{:<120}".format("-"*ruler))
+
     if collecting:
         mqtt.loop_start()
+    return
 
 ###############################################################################
 # Functions for displaying
@@ -562,15 +625,15 @@ def write_display_row_for_device(dev):
             tbl[dRow][col].set(round(snr,1))
             tbl[dRow][col+1].set(round(sigma,2))
             col += 2
-        if not omitITGT and ITGT is not None:
-            (cnt,itgt,sigma,min,max) = ITGT.get()
-            tbl[dRow][col].set(round(itgt,1))
-            tbl[dRow][col+1].set(round(sigma,2))
-            col += 2
         if not omitFreq:
             (cnt,freq,sigma,min,max) = Freq.get()
             tbl[dRow][col].set(round(freq,3))
             tbl[dRow][col+1].set(round(sigma,3))
+            col += 2
+        if not omitITGT and ITGT is not None:
+            (cnt,itgt,sigma,min,max) = ITGT.get()
+            tbl[dRow][col].set(round(itgt,1))
+            tbl[dRow][col+1].set(round(sigma,2))
             col += 2
         if not omitPPT and PPT is not None:
             (cnt,ppt,sigma,min,max) = PPT.get()
@@ -637,7 +700,7 @@ def subscribe(mqtt: mqtt_client):
         global first_rec, last_rec
         global devices
         global dedups, totrecs
-        global tbl, devnum
+        global tbl
 
         # count this new record
         totrecs += 1
@@ -736,17 +799,17 @@ def add_row(dRow):
         lbl_snr.grid( row=dRow, column=col,   padx=2, pady=2, sticky="W")
         lbl_snr𝜎.grid(row=dRow, column=col+1, padx=2, pady=2, sticky="W")
         col += 2
-    if not omitITGT:
-        lbl_itgt    = tk.Label(row, width=10, textvariable=tbl[dRow][col],   font=dfont, bg=bg)
-        lbl_itgt𝜎   = tk.Label(row, width=10, textvariable=tbl[dRow][col+1], font=dfont, bg=bg)
-        lbl_itgt.grid( row=dRow, column=col,   padx=2, pady=2, sticky="W")
-        lbl_itgt𝜎.grid(row=dRow, column=col+1, padx=2, pady=2, sticky="W")
-        col += 2
     if not omitFreq:
         lbl_freq    = tk.Label(row, width=10, textvariable=tbl[dRow][col],   font=dfont, bg=bg)
         lbl_freq𝜎   = tk.Label(row, width=10, textvariable=tbl[dRow][col+1], font=dfont, bg=bg)
         lbl_freq.grid( row=dRow, column=col,   padx=2, pady=2, sticky="W")
         lbl_freq𝜎.grid(row=dRow, column=col+1, padx=2, pady=2, sticky="W")
+        col += 2
+    if not omitITGT:
+        lbl_itgt    = tk.Label(row, width=10, textvariable=tbl[dRow][col],   font=dfont, bg=bg)
+        lbl_itgt𝜎   = tk.Label(row, width=10, textvariable=tbl[dRow][col+1], font=dfont, bg=bg)
+        lbl_itgt.grid( row=dRow, column=col,   padx=2, pady=2, sticky="W")
+        lbl_itgt𝜎.grid(row=dRow, column=col+1, padx=2, pady=2, sticky="W")
         col += 2
     if not omitPPT:
         lbl_ppt    = tk.Label(row, width=10, textvariable=tbl[dRow][col],   font=dfont, bg=bg)
@@ -794,10 +857,12 @@ def create_display():
                             relief="raised", font=bfont, fg="red")
     btn_toggle  = tk.Button(frm_toolbar, text="Togl",          command=toggle_fullscreen,
                             relief="raised", font=bfont, fg='blue')
-    btn_prtsum  = tk.Button(frm_toolbar, text="Print Summary", command=printsum,
+    btn_prtsum  = tk.Button(frm_toolbar, text="Print Summary", command=print_summary,
                             relief="raised", font=bfont, fg="green")
     btn_wrst    = tk.Button(frm_toolbar, text="Reset Warn",    command=reset_warn,
-                            relief="raised", font=bfont, bg='yellow', fg='black')
+                            relief="raised", font=bfont, fg='orange')
+    btn_legend  = tk.Button(frm_toolbar, text="Heading Info",    command=legend,
+                            relief="raised", font=bfont, fg='magenta')
     btn_device.pack(side="left")
     btn_reccnt.pack(side="left")
     btn_snr.pack(side="left")
@@ -805,6 +870,7 @@ def create_display():
     btn_toggle.pack(side="right")
     btn_prtsum.pack(side="right")
     btn_wrst.pack(side="right")
+    btn_legend.pack(side="right")
 
     # Build the information section
     frm_info = tk.Frame(win, borderwidth=5, relief="raised")
@@ -841,15 +907,13 @@ def create_display():
         tbl[0][col].set("SNR\nMean")
         tbl[0][col+1].set("SNR\n𝜎")
         col += 2
-#    tbl[0][6].set("Min\nSNR")
-#    tbl[0][7].set("Max\nSNR")
-    if not omitITGT:
-        tbl[0][col].set("ITGT\nMean")
-        tbl[0][col+1].set("ITGT\n𝜎")
-        col += 2
     if not omitFreq:
         tbl[0][col].set("Freq\nMean")
         tbl[0][col+1].set("Freq\n𝜎")
+        col += 2
+    if not omitITGT:
+        tbl[0][col].set("ITGT\nMean")
+        tbl[0][col+1].set("ITGT\n𝜎")
         col += 2
     if not omitPPT:
         tbl[0][col].set("PPT\nMean")
@@ -880,13 +944,11 @@ if __name__ == "__main__":
     # Init the performance counters
     totrecs = 0
     dedups  = 0
-    devnum = 0
 
     # Create the display
     create_display()
 
-    # Connect to the mqtt host and subscribe to the feed.                                                            
-    # This activates the on_message procedure in which 
+    # Connect to the mqtt host and subscribe to the feed.                                                              # This activates the on_message procedure in which 
     #   MQTT events cause the displayed values to be updated
     
     mqtt = connect_mqtt()

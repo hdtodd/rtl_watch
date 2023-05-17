@@ -536,8 +536,7 @@ def print_summary():
     global grp_cnt, omitSNR, omitFreq, omitITGT, omitPPT
     mqtt.loop_stop()
     ruler = 48 + 18*grp_cnt
-    fn = f'rtl-watch-{random.randint(0, 1000)}.prn'
-    with open(fn, 'a') as f:
+    with open("rtl-watch.prn", 'a') as f:
         print("\n{:<120}".format("-"*ruler), file=f)
         print("rtl_watch: Printing summary of recorded rtl_433 packets\n", file=f)
         print("Monitoring host", host, "topic", topic, file=f)
@@ -591,7 +590,7 @@ def print_summary():
                 print("   {:>8.1f} ±{:>5.2f}".format(avg,std), end="", file=f)
             print(file=f)
         print("\n{:<120}".format("-"*ruler), file=f)
-    print("rtl_433_watch summary table written to file", fn)
+    print("rtl_433_watch summary table appended to file \'rtl-watch.prn'")
     
     if collecting:
         mqtt.loop_start()

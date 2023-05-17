@@ -427,6 +427,7 @@ def CnvTime(ts):
 def sortDevice():
     global collecting
     mqtt.loop_stop()
+    time.sleep(.5)
     row = 1
     for	dev in sorted(devices):
         devices[dev].dRow = row
@@ -440,6 +441,7 @@ def sortDevice():
 def sortRecCnt():
     global collecting
     mqtt.loop_stop()
+    time.sleep(.5)
     cntlist = {}
     for dev in devices:
         (pkt,xmt,SNR,ITGT,Freq,PPT) = devices[dev].get()
@@ -459,6 +461,7 @@ def sortRecCnt():
 def sortSnr():
     global collecting
     mqtt.loop_stop()
+    time.sleep(.5)
     snrlist = {}
     for dev in devices:
         (pkt,xmt,SNR,ITGT,Freq,PPT) = devices[dev].get()
@@ -480,6 +483,7 @@ def sortSnr():
 def reset_warn():
     global collecting
     mqtt.loop_stop()
+    time.sleep(.5)
     for dev in devices:
         devices[dev].battery = 1
         devices[dev].wlevel  = Warn.OK
@@ -506,6 +510,7 @@ def legend():
 # CNTL-C and QUIT button handler
 def quit_prog(event=None):
     mqtt.loop_stop()
+    time.sleep(.5)
     print()
     time.sleep(1)      # let events clear (we hope)
     mqtt.disconnect()
@@ -516,6 +521,7 @@ def toggle_collecting(event=None):
     global collecting
     if collecting:
         mqtt.loop_stop()
+        time.sleep(.5)
         print("Data collection paused ...")
     else:
         mqtt.loop_start()

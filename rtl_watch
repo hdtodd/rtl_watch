@@ -1,5 +1,7 @@
 #! /usr/bin/env python3
 #  rtl_watch
+VERSION="2.0.0"
+
 #  Python program for real-time monitoring of ISM packets.
 #
 #  Uses an ISM-band monitoring computer that runs rtl_433 to
@@ -61,8 +63,6 @@ rtl_433_watch:  Real-time monitor for ISM-band device transmissions
 AP_EPILOG="""
 
 """
-
-VERSION="2.0.0"
 
 ###################################################################################
 # A class to compute mean, standard deviation, min, and max of a stream  of numbers
@@ -509,11 +509,11 @@ def legend():
 ###############################################################################
 # CNTL-C and QUIT button handler
 def quit_prog(event=None):
-    mqtt.loop_stop()
-    time.sleep(.5)
-    print()
-    time.sleep(1)      # let events clear (we hope)
-    mqtt.disconnect()
+#    mqtt.loop_stop()
+#    time.sleep(.5)
+#    print()
+#    time.sleep(1)      # let events clear (we hope)
+#    mqtt.disconnect()
     win.quit()
     sys.exit(0)
 
@@ -674,8 +674,11 @@ def connect_mqtt() -> mqtt_client:
             print("Failed attempt to connect to ", mqtt)
             print("  with userdata ", userdata)
             print("Return code %d\n", rc)
-
-    mqtt = mqtt_client.Client(client_id, clean_session=False)
+# Work around paho-mqtt v1, v2+ Client instantiation parameter diffs
+    try:
+        mqtt = mqtt_client.Client(client_id, clean_session=False)
+    except:
+        mqtt = mqtt_client.Client(mqtt_client.CallbackAPIVersion.VERSION1, client_id, clean_session=False)
     mqtt.username_pw_set(username, password)
     mqtt.on_connect = on_connect
     mqtt.connect(host, port)

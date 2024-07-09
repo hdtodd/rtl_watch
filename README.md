@@ -4,6 +4,7 @@
 `rtl_watch` monitors output from `rtl_433` to display, in real time, the characteristics of the ISM-band devices broadcasting in your neighborhood.
 
 `rtl_watch` can help you understand the ISM environment in your neighborhood by cataloging devices near you that are broadcasting on the ISM band (433MHz in the US).  The values provided by `rtl_watch` for the device signal characteristics over a number of readings may help you identify devices that are close to your location and/or new devices in your neighborhood.
+![][rtl_watch.png]
 ![](https://github.com/hdtodd/rtl_watch/blob/main/rtl_watch.png)
 
 ## Use
@@ -23,11 +24,11 @@ This section provides general information about the monitoring process.  It indi
 
 1. the `rtl_433` host that it is monitoring;
 1. the total number of packets received (many of which are duplicates since devices may send multiple packets for a single observation);
-1. the total number of tranmissions -- de-duplicated packets -- received;
+1. the total number of tranmissions received (de-duplicated packets);
 1. the date and time of the earliest and latest transmission observed.
 
 ### The Lower Information Section
-This section is the table of characteristics of the signals observed from the various devices:
+This section is the table of characteristics of the signals observed from the each device:
 
 1. the device name, which is a concatenated string of "device model"/"channel"/"device id", as observed and reported by `rtl_433`;
 1. warning flags observed from the device (see below);
@@ -69,19 +70,56 @@ The **Reset Warn** button clears both the battery-low and status-change flags fo
 
 The information from `rtl_watch` can be helpful in several ways to understand your ISM neighborhood:
 
-1.  Which devices are closest to you?  High values of SNR mean (e.g., 15-20) and standard deviation indicate that the device is likely close to your RTL-SDR receiver.  Also, high values for packet or transmit count likely indicate a device close to your receiver, as their packets are received routinely, relative to those with low counts (but check correlation with ITG and PPT).
-1.  Which devices may either be remote or experiencing interference from other devices?  A high standard deviation value for ITG (inter-transmission gap) or PPT (packets per transmission) indicate that the transmitting device's packets are not being received routinely.  That could be because of interference from other devices (which prevent the packets from being decoded correctly) or because the device is remote from your receiver (check for correlation SNR mean and standard deviation).
+1.  Which devices are closest to you?  High values of SNR mean (e.g., 15-20) and standard deviation indicate that the device is likely close to your RTL-SDR receiver.  Also, high values for packet or transmit count likely indicate a device close to your receiver, as their packets are received routinely, relative to those with low counts (but check correlation with ITGT and PPT).
+1.  Which devices may either be remote or experiencing interference from other devices?  A high standard deviation value for ITGT (inter-transmission gap time) or PPT (packets per transmission) indicate that the transmitting device's packets are not being received routinely.  That could be because of interference from other devices (which prevent the packets from being decoded correctly) or because the device is remote from your receiver (check for correlation SNR mean and standard deviation).
 1.  Which devices have unreliable oscillators?  A high value for frequency standard deviation likely indicate an unstable (possibly older) device clock.
 
 ## Installing `rtl_watch`
 
-`rtl_watch` is a Python3 program.  It requires that the Python packages `tkinter` and `paho-mqtt` be installed on the computer on which `rtl_watch` is invoked.  `rtl_watch` has been tested on Mac OSX Catalina and Raspbian Bullseye. On Mac OSX, you may need to install Python3 if you haven't already done so ( <https://www.python.org/downloads/macos/> ).
+`rtl_watch` is a Python3 program.  It requires that the Python packages `tkinter` and `paho-mqtt` be installed on the computer on which `rtl_watch` is invoked.  `rtl_watch` has been tested on Mac OSX Catalina and Sonoma and Raspbian Bullseye and Bookworm. On Mac OSX, you may need to install Python3 if you haven't already done so ( <https://www.python.org/downloads/macos/> ).
+
+To install, connect to the an appropriate directory for downloading code and issue the command
+   `git clone http://github.com/hdtodd/rtl_watch`
+then `cd rtl_watch` and `./rtl_watch` to run the program.  See below for options.
 
 `rtl_watch` requires Python3 and Paho-MQTT on the displaying computer and an `rtl_433` system running on your local area network (description in subsequent section).  Paho-MQTT v2 broke v1 callback invocations, but v2.1.0 of `rtl_watch` incorporates a workaround so that it will operate with either v1.x or v2.x of Paho-MQTT.  However, invocation on a system running v2.x will generate a warning, since `rtl_watch` continues to use the deprecated v1-style callback invocation for now.
 
-`rtl_watch` requires that a computer (the "monitoring computer") on your local-area network be running `rtl_433` and re-broadcasting the packets it recognizes via the `mqtt` protocol on the local-area network.  See instructions below if you do not have an `rtl_433` system set up or if it has not been set up to re-broadcast packets through the `mqtt` broker.
+`rtl_watch` requires that a computer (the "monitoring computer") on your local-area network be running `rtl_433` and re-broadcasting the packets it recognizes as JSON messages via the `mqtt` protocol on the local-area network.  See instructions below if you do not have an `rtl_433` system set up or if it has not been set up to re-broadcast packets through the `mqtt` broker.
 
-### Providing MQTT parameters
+## Using `rtl_watch`
+
+### Command-line Options
+
+The following options may be provided on the command line to provide parameters and manage program operation:
+
+*  \[`-h` | `--help`\]  
+   Describes the command-line options
+*  \[`-H` | `--host`\] `<MQTT Broker host name (string)>`  
+   Identify the MQTT broker on your local-area network that is publishing `rtl_433` packet infomation in JSON format
+*  \[`-T` | `--topic`\] `<MQTT Broker rtl_433 topic (string)>`  
+   Identify the rtl_433 topic as it is being broadcast by the MQTT broker
+*  \[`-U` | `--username`\] `<MQTT Broker rtl_433 username (string)>`  
+   *Only needed if broker is secured*:  Username needed to access the MQTT broker
+*  \[`-P` | `--password`\] `<MQTT Broker rtl_433 password>`  
+   *Only needed if broker is secured*: Password  needed to access the MQTT broker
+*  \[`-p` | `--port`\] `<MQTT Broker rtl_433 port (integer)>`  
+   *Only needed if modified from default 1883*:  Port the MQTT broker is using to broadcast rtl_433 messages 
+*  \[`-x` | `--exclude_noise`\] `<noise threshhold (integer)>`  
+   Don't display devices with fewer than \<threshhold\> packets seen
+*  \[`-w` | `--xmit_window`\] `<max transmission time (float, in sec)>`  
+   Devices generally send multiple packets in hope that one will be received ungarbled; this sets the maximum time for packets from one device to be considered to be the transmission of a single observation.  Default: 2.0 seconds.
+*  \[`-t` | `--TPMS`\]  
+   Enable display of tire pressure monitoring system observations.  In areas with heavy automobile traffic, a significant number of tire-pressure monitor system (TPMS) readings, many just one transmission, will be observed and clutter the table.  By default, TPMS observations are **not displayed**.  This option will enable their display.
+*  \[`-o` | `--omit`\] `[ SNR &| Freq &| ITGT &| PPT ]`  
+   Omit any combination of the signal analysis data from the display table
+*  \[`-d` | `--debug`\]  
+   Print debugging information on the controlling console
+*  \[`-W` | `--warn`\]  
+   Inject warning notations at packets 20 and 40 to verify operation; required `-d` option enabled
+*  \[`-v` | `--version`\]  
+   Displays the version of rtl_watch.
+
+### Providing MQTT Parameters
 
 `rtl_watch` requires information about the `rtl_433` MQTT publishing host:
 

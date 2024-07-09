@@ -508,12 +508,12 @@ def legend():
 
 ###############################################################################
 # CNTL-C and QUIT button handler
-def quit_prog(event=None):
-#    mqtt.loop_stop()
-#    time.sleep(.5)
-#    print()
-#    time.sleep(1)      # let events clear (we hope)
-#    mqtt.disconnect()
+def quit_prog():
+    mqtt.loop_stop()
+    time.sleep(.5)
+    print()
+    time.sleep(1)      # let events clear (we hope)
+    mqtt.disconnect()
     win.quit()
     sys.exit(0)
 

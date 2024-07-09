@@ -46,7 +46,7 @@ This section is located just below the title bar and provides the following cont
 1. **Sort SNR** sorts the table entries in decreasing order of SNR (signal-to-noise ratio values).  This may help identify the devices that are closest to your RTL-SDR receiver.
 1.  **Heading Info** pops up a window to describe the table column contents.
 1. **Reset Warn**  clears the warning flags for all devices (see below).
-1. **Print Summary** prints to the controlling terminal session the contents of the table, sorted in alphabetical order by the device name/chnl/id string..
+1. **Print Summary** appends to the file "rtl_watch.prn", in the directory of the controlling console, the contents of the table, sorted in alphabetical order by the device name/chnl/id string.
 1. **Togl** toggles the display window between full screen and reduced size.
 1. **Quit** exits the program.  (CNTL-C in the controlling terminal window also works) 
 
@@ -172,7 +172,7 @@ The developers of `rtl_433` continually update the list of devices that the prog
  
 ## Known Issues
 
-On occasion, pressing the Stop button in `rtl_watch` results in a hung application (at least on Mac OSX), requiring a forced-quit.  This appears to be related to the Python GIL issue and may disappear in future Python releases or on other systems.
+On occasion, pressing the **Quit** button in `rtl_watch` results in a hung application (at least on Mac OSX), requiring a forced-quit.  This appears to be related to the Python GIL issue and may disappear in future Python releases or on other systems.
        
 ## Related Tools
 These related `rtl_433` tools might also be helpful:

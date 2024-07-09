@@ -1,6 +1,6 @@
 #! /usr/bin/env python3
 #  rtl_watch
-VERSION="2.0.0"
+VERSION="2.1.0"
 
 #  Python program for real-time monitoring of ISM packets.
 #

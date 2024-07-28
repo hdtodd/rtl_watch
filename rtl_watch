@@ -1,30 +1,32 @@
 #! /usr/bin/env python3
 #  rtl_watch
-VERSION="2.1.0"
+VERSION="3.0.0"
 
 #  Python program for real-time monitoring of ISM packets.
 #
-#  Uses an ISM-band monitoring computer that runs rtl_433 to
-#  collect and analyze ISM-band (433MHz in the US) packet
-#  broadcast by remote-sensing devices and received at the
-#  monitoring computer via RTL_SDR dongle.
+#  Monitors mqtt packets from a computer running rtl_433 to
+#  collect data from and analyze characteristics of ISM-band
+#  remote-sensing device transmissions (433MHz in the US).
 #
 #  rtl_433 on the monitoring computer analyzes radio packets
-#  and broadcasts the information about recognized packets via
-#  mqtt broker host
+#  and broadcasts the information in JSON format for
+#  recognized packets via mqtt broker host
 #
 #  rtl_watch subscribes to that published mqtt stream to
-#  record, count, and analyze signal strength of packets
-#  received by that RTL_SDR dongle.  rtl_watch can run on
-#  the monitoring computer or any number of other computers
+#  record, count, and analyze signal strength and other date
+#  for packets received by that RTL_SDR dongle.  rtl_watch can
+#  run on the monitoring computer or any number of other computers
 #  on the LAN to which the monitoring computer is connected.
 #
 #  Devices and analyzed data are displayed in real time in
 #  a window on the computer running rtl_watch.
 #  Analyzed data includes
-#     Device Name, # of records seen,
-#        and signal-to-noise ratio mean, standard deviation,
-#        min, and max
+#     Device Name, # of records seen, and
+#        signal-to-noise ratio mean, standard deviation, min, and max;
+#        signal frequency mean, standard deviation, min, and max;
+#        time between packets mean, standard deviation, min, and max;
+#        number of packets per transmission
+#           mean, standard deviation, min, and max.
 #  The data are updated dynamically, as the packets are seen.
 #
 #  At any time, user can print a summary of devices seen
@@ -32,6 +34,7 @@ VERSION="2.1.0"
 #
 #  Written by H. David Todd, hdtodd@gmail.com, 2023.03.02
 #  V2.0.0 modifications 2023.05
+#  V3.0.0 modifications 2024.07
 
 import argparse
 import sys
@@ -426,22 +429,15 @@ def CnvTime(ts):
 # Button action routines
 def sortDevice():
     global collecting
-    mqtt.loop_stop()
-    time.sleep(.5)
     row = 1
     for	dev in sorted(devices):
         devices[dev].dRow = row
         write_display_row_for_device(dev)
         row += 1
-
-    if collecting:
-        mqtt.loop_start()
     return
 
 def sortRecCnt():
     global collecting
-    mqtt.loop_stop()
-    time.sleep(.5)
     cntlist = {}
     for dev in devices:
         (pkt,xmt,SNR,ITGT,Freq,PPT) = devices[dev].get()
@@ -453,15 +449,10 @@ def sortRecCnt():
         devices[cntlist[rec]].dRow = row
         write_display_row_for_device(devices[cntlist[rec]].dev)
         row += 1
-
-    if collecting:
-        mqtt.loop_start()    
     return
 
 def sortSnr():
     global collecting
-    mqtt.loop_stop()
-    time.sleep(.5)
     snrlist = {}
     for dev in devices:
         (pkt,xmt,SNR,ITGT,Freq,PPT) = devices[dev].get()
@@ -473,25 +464,18 @@ def sortSnr():
         devices[snrlist[rec]].dRow = row
         write_display_row_for_device(devices[snrlist[rec]].dev)
         row += 1
-
-    if collecting:
-        mqtt.loop_start()    
     return
 
 ###############################################################################
 # Reset device warnings to OK and rewrite the display table accordingly
 def reset_warn():
     global collecting
-    mqtt.loop_stop()
-    time.sleep(.5)
     for dev in devices:
         devices[dev].battery = 1
         devices[dev].wlevel  = Warn.OK
         devices[dev].warn    = Warnings[Warn.OK]
     for row in range(1, len(tbl)):
         tbl[row][1].set(Warnings[Warn.OK])
-    if collecting:
-        mqtt.loop_start()
     return
 
 ###############################################################################
@@ -534,7 +518,6 @@ def print_summary():
     global devices
     global dedups, totrecs
     global grp_cnt, omitSNR, omitFreq, omitITGT, omitPPT
-    mqtt.loop_stop()
     ruler = 48 + 18*grp_cnt
     with open("rtl-watch.prn", 'a') as f:
         print("\n{:<120}".format("-"*ruler), file=f)
@@ -591,9 +574,6 @@ def print_summary():
             print(file=f)
         print("\n{:<120}".format("-"*ruler), file=f)
     print("rtl_433_watch summary table appended to file \'rtl-watch.prn'")
-    
-    if collecting:
-        mqtt.loop_start()
     return
 
 ###############################################################################

@@ -33,8 +33,11 @@ VERSION="3.0.0"
 #  to date, and then analysis continues.
 #
 #  Written by H. David Todd, hdtodd@gmail.com, 2023.03.02
-#  V2.0.0 modifications 2023.05
-#  V3.0.0 modifications 2024.07
+#  V1.0.0 Initial working version, 2023.02
+#  V2.0.0 modifications 2023.05: expanded set of characteristics,
+#         improved window handling, improved parameter-setting
+#  V3.0.0 modifications 2024.07: use a queue and threads to
+#         catch and records all packets
 
 import argparse
 import sys
@@ -47,6 +50,8 @@ import time
 import datetime
 import math
 from   enum import IntEnum
+from queue import Queue
+import threading
 try:
     import tkinter as tk
     from tkinter import ttk
@@ -186,6 +191,7 @@ dfont      = None
 hfont      = None
 lfont      = None
 pktcnt     = 0
+totrecs    = 0
 first_rec  = True
 noTPMS     = True
 omitSNR    = False
@@ -205,6 +211,9 @@ bl_flag    = "\U0000203C"  # '!!': want to use "\U0001FAAB" {low battery} but no
 st_flag    = "\U00002049"  # '?!'
 Warnings   = [" ", st_flag, bl_flag]
 Warn       = IntEnum('Warn', [ ('OK', 0), ('ALERT', 1), ('ALARM', 2)])
+
+global exit_event
+global msg_q
 
 # Set 2-sec threshhold for rejecting duplicate records
 dup_thresh = 2.0
@@ -493,10 +502,13 @@ def legend():
 ###############################################################################
 # CNTL-C and QUIT button handler
 def quit_prog():
+    global exit_event
+    global msg_q
+    global mqtt
+
+    exit_event.set()
+    msg_q.put(None)
     mqtt.loop_stop()
-    time.sleep(.5)
-    print()
-    time.sleep(1)      # let events clear (we hope)
     mqtt.disconnect()
     win.quit()
     sys.exit(0)
@@ -654,7 +666,10 @@ def connect_mqtt() -> mqtt_client:
             print("Failed attempt to connect to ", mqtt)
             print("  with userdata ", userdata)
             print("Return code %d\n", rc)
-# Work around paho-mqtt v1, v2+ Client instantiation parameter diffs
+            sys.exit(1)
+        return #from on_connect
+    
+    # Work around paho-mqtt v1, v2+ Client instantiation parameter diffs
     try:
         mqtt = mqtt_client.Client(client_id, clean_session=False)
     except:
@@ -662,86 +677,100 @@ def connect_mqtt() -> mqtt_client:
     mqtt.username_pw_set(username, password)
     mqtt.on_connect = on_connect
     mqtt.connect(host, port)
-    subscribe(mqtt)
-    return mqtt
+    return mqtt #from connect_mqtt()
+
+# Process messages that are put into the queue by 'on_message'
+def process_msg(mqtt):
+    global exit_event
+    global msg_q
+    global first_rec, last_rec
+    global devices
+    global dedups, totrecs
+    global tbl
+    while True:
+        msg = msg_q.get()
+        if msg == None:
+            mqtt.loop_stop()
+            print("Stop mqtt loop in 'process_msg'")
+        else:
+            # Parse the json payload and process
+            # When we get a record, ignore if it's a duplicate,
+            #   update display if it isn't
+            y = json.loads(msg.payload.decode())
+
+            # Is this a record type that we want to process?
+            if "model" not in y:
+                return
+            if noTPMS and "type" in y and y["type"]=="TPMS":
+                return
+
+            #  Create the device identifier as "model/channel/id"
+            dev = y["model"] + "/"
+            if "channel" in y:
+                dev += str(y["channel"])
+            dev += "/"
+            if "id" in y:
+                dev += str(y["id"])
+
+            # Convert data values to standard form
+            eTime   = CnvTime(y["time"])
+            snr     = 0.0 if "snr"  not in y else float(y['snr'])
+            freq    = 0.0 if "freq" not in y else float(y["freq"])
+            battery = None if "battery_ok" not in y else y["battery_ok"]
+            status  = None if "status"     not in y else y["status"]
+
+            # if debuging warnings (-d -W), inject warning conditions at pkts 10, 20
+            if debugW:
+                if pktcnt==10:
+                    status = 9
+                    print(CSIMGN, "Inserting status-code change for display debugging", CSIBLK)
+                if pktcnt==20:
+                    battery = 0
+                    print(CSIRED, "Inserting battery-low condition for display debugging", CSIBLK)
+
+            if dev in devices:
+                dup = devices[dev].update(eTime, snr, freq, battery, status)
+            else:
+                dRow = len(tbl)
+                if debug:
+                    print("Appending new device", dev, " to end of tbl at row", dRow)
+                devices[dev] = Data(dev, dRow, eTime, snr, freq, battery, status)
+                add_row(dRow)
+                dup = False
+
+            if not dup:
+                dedups += 1
+                if debug:
+                    print("{:<25} {:<20} snr={:>4.1f}".format(dev, y["time"], snr) )
+
+                if first_rec:
+                    earliest_time.set( y["time"])
+                    first_rec = False
+                last_time.set(y["time"])
+
+                write_display_row_for_device(dev)
+
+            pkt_cnt.set(totrecs)
+            xmt_cnt.set(dedups)
+            # No return; thread exits when loop_stop() is invoked
 
 # Subscribe to rtl_433 publication & process records we receive
 def subscribe(mqtt: mqtt_client):
-
-    # on_message does the real work
-    # When we get a record, ignore if it's a duplicate, update display if it isn't
     def on_message(mqtt, userdata, msg):
-        global first_rec, last_rec
-        global devices
-        global dedups, totrecs
-        global tbl
-
-        # count this new record
+        global msg_q
+        global totrecs
+        
+        # count this new record and queue it for processing
         totrecs += 1
-        # parse the json payload
-        y = json.loads(msg.payload.decode())
-
-        # Is this a record type that we want to process?
-        if "model" not in y:
-            return
-        if noTPMS and "type" in y and y["type"]=="TPMS":
-            return
-
-        #  Create the device identifier as "model/channel/id"
-        dev = y["model"] + "/"
-        if "channel" in y:
-            dev += str(y["channel"])
-        dev += "/"
-        if "id" in y:
-            dev += str(y["id"])
-
-        # Convert data values to standard form
-        eTime   = CnvTime(y["time"])
-        snr     = 0.0 if "snr"  not in y else float(y['snr'])
-        freq    = 0.0 if "freq" not in y else float(y["freq"])
-        battery = None if "battery_ok" not in y else y["battery_ok"]
-        status  = None if "status"     not in y else y["status"]
-
-        # if debuging warnings (-d -W), inject warning conditions at pkts 10, 20
-        if debugW:
-            if pktcnt==10:
-                status = 9
-                print(CSIMGN, "Inserting status-code change for display debugging", CSIBLK)
-            if pktcnt==20:
-                battery = 0
-                print(CSIRED, "Inserting battery-low condition for display debugging", CSIBLK)
-
-        if dev in devices:
-            dup = devices[dev].update(eTime, snr, freq, battery, status)
-        else:
-            dRow = len(tbl)
-            if debug:
-                print("Appending new device", dev, " to end of tbl at row", dRow)
-            devices[dev] = Data(dev, dRow, eTime, snr, freq, battery, status)
-            add_row(dRow)
-            dup = False
-
-        if not dup:
-            dedups += 1
-            if debug:
-                print("{:<25} {:<20} snr={:>4.1f}".format(dev, y["time"], snr) )
-
-            if first_rec:
-                earliest_time.set( y["time"])
-                first_rec = False
-            last_time.set(y["time"])
-            
-            write_display_row_for_device(dev)
-
-        pkt_cnt.set(totrecs)
-        xmt_cnt.set(dedups)
-        return #Fron on_message
+        msg_q.put(msg)
+        return
         
     mqtt.subscribe(topic)
     mqtt.on_message = on_message
     if debug:
         print("Subscribed to mqtt feed")
-    return #From subscribe()
+    mqtt.loop_start()
+    return #From subscribe(), but 'on_message' is active
 
 #######################################################################################
 # Table management and display
@@ -917,6 +946,11 @@ def create_display():
 
 if __name__ == "__main__":
 
+    global msg
+    global userdata
+    userdata = None
+    exit_event = threading.Event()
+    msg_q = Queue()
     t = datetime.datetime.now()
     signal.signal(signal.SIGINT, quit_prog)
 
@@ -940,10 +974,25 @@ if __name__ == "__main__":
     # This activates the on_message procedure in which
     #   MQTT events cause the displayed values to be updated
     mqtt = connect_mqtt()
-    mqtt.loop_start()
 
     if debug:
-        print("Entering main run loop")
+        print("Entering main run loops")
 
+    t1 = threading.Thread(target = process_msg, args=(mqtt,))
+    t2 = threading.Thread(target = subscribe, args=(mqtt,))
+    t1.start()
+    t2.start()
     # Start the tkinter main loop and let MQTT events populate the display
     win.mainloop()
+
+
+
+    # Subscribe returns immediately bu 'on_message' continues
+    #   to respond to incoming 'msg' packets
+    t2.join()
+    print("T2 joined; 'subscribe' exited but 'on_message continues")
+
+    t1.join()
+    # Consumer thread, 'process_msg' has stopped: exit
+    print("Exiting normally")
+    sys.exit(0)

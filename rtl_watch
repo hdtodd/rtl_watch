@@ -506,7 +506,8 @@ def quit_prog():
     global msg_q
     global mqtt
     global win
-    print("Quitting from quit_prog")
+    if debug:
+        print("Quitting from quit_prog")
     exit_event.set()
     msg_q.put(None)
     win.destroy()
@@ -692,7 +693,8 @@ def process_msg(mqtt):
         msg = msg_q.get()
         if msg == None:
             mqtt.loop_stop()
-            print("Stop mqtt loop in 'process_msg'")
+            if debug:
+                print("Stop mqtt loop in 'process_msg'")
             break
         else:
             # Parse the json payload and process
@@ -991,12 +993,16 @@ if __name__ == "__main__":
     # Subscribe returns immediately but 'on_message' continues
     #   to respond to incoming 'msg' packets
     t2.join()
-    print("'subscribe' thread exited but 'on_message' continues")
+    if debug:
+        print("'subscribe' thread exited but 'on_message' continues")
 
     # Start window; will be terminated by 'quit_prog'
     win.mainloop()
 
     t1.join()
     # Consumer thread, 'process_msg' has stopped: exit
-    print("'process_msg' thread terminated; exiting normally")
+    if debug:
+        print("'process_msg' thread terminated; exiting normally")
+    else:
+        print("Quitting ...")
     sys.exit(0)

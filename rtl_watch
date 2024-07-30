@@ -751,8 +751,8 @@ def process_msg(mqtt):
                     earliest_time.set( y["time"])
                     first_rec = False
                 last_time.set(y["time"])
-
-                write_display_row_for_device(dev)
+#[hdt]
+            write_display_row_for_device(dev)
 
             pkt_cnt.set(totrecs)
             xmt_cnt.set(dedups)

@@ -505,13 +505,14 @@ def quit_prog():
     global exit_event
     global msg_q
     global mqtt
-
+    global win
+    print("Quitting from quit_prog")
     exit_event.set()
     msg_q.put(None)
+    win.destroy()
     mqtt.loop_stop()
     mqtt.disconnect()
-    win.quit()
-    sys.exit(0)
+
 
 def toggle_collecting(event=None):
     global collecting
@@ -692,6 +693,7 @@ def process_msg(mqtt):
         if msg == None:
             mqtt.loop_stop()
             print("Stop mqtt loop in 'process_msg'")
+            break
         else:
             # Parse the json payload and process
             # When we get a record, ignore if it's a duplicate,
@@ -719,6 +721,8 @@ def process_msg(mqtt):
             battery = None if "battery_ok" not in y else y["battery_ok"]
             status  = None if "status"     not in y else y["status"]
 
+            print(dev, "\t", eTime)
+            
             # if debuging warnings (-d -W), inject warning conditions at pkts 10, 20
             if debugW:
                 if pktcnt==10:
@@ -950,7 +954,7 @@ if __name__ == "__main__":
     global userdata
     userdata = None
     exit_event = threading.Event()
-    msg_q = Queue()
+    msg_q = Queue(0)
     t = datetime.datetime.now()
     signal.signal(signal.SIGINT, quit_prog)
 
@@ -983,16 +987,16 @@ if __name__ == "__main__":
     t1.start()
     t2.start()
     # Start the tkinter main loop and let MQTT events populate the display
-    win.mainloop()
 
-
-
-    # Subscribe returns immediately bu 'on_message' continues
+    # Subscribe returns immediately but 'on_message' continues
     #   to respond to incoming 'msg' packets
     t2.join()
-    print("T2 joined; 'subscribe' exited but 'on_message continues")
+    print("'subscribe' thread exited but 'on_message' continues")
+
+    # Start window; will be terminated by 'quit_prog'
+    win.mainloop()
 
     t1.join()
     # Consumer thread, 'process_msg' has stopped: exit
-    print("Exiting normally")
+    print("'process_msg' thread terminated; exiting normally")
     sys.exit(0)

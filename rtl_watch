@@ -723,8 +723,6 @@ def process_msg(mqtt):
             battery = None if "battery_ok" not in y else y["battery_ok"]
             status  = None if "status"     not in y else y["status"]
 
-            print(dev, "\t", eTime)
-            
             # if debuging warnings (-d -W), inject warning conditions at pkts 10, 20
             if debugW:
                 if pktcnt==10:

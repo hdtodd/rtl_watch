@@ -38,7 +38,7 @@ This section is the table of characteristics of the signals observed from the ea
 1. the mean and standard deviation of the inter-transmission gap times (ITGT) between transmissions from each device;
 1. the mean and standard deviation of the number of packets per transmission (PPT) from each device.
 
-**Note**
+[!NOTE]
 ITGT and PPT statistics *lag one transmission behind readings*, since the past transmission isn't recognized until a new one begins.
 
 ### The Control Buttons

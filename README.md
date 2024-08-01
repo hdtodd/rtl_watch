@@ -175,7 +175,7 @@ The developers of `rtl_433` continually update the list of devices that the prog
  
 ## Known Issues
 
-The current version of Python Paho-MQTT is v2 on MacOS Sonoma, Python v3.12.4, and v1.6 on RaspiOS as installed with apt-get/pip3.  Paho-MQTT v2 broke the callback invocation for v1.  `rtl_watch` has a workaround (invokes v1 compatibility on a v2 system), but v2 issues a deprecation warning.  This will be corrected to use v2 invocation when the RaspiOS Paho-MQTT library has been updated to v2.
+The current version of Python Paho-MQTT is v2 on MacOS Sonoma, Python v3.12.4, and v1.6 on RaspiOS 6.6 Bookworm and Python v3.11.2 as installed with apt-get/pip3.  Paho-MQTT v2 broke the callback invocation for v1.  `rtl_watch` has a workaround (invokes v1 compatibility on a v2 system), but v2 issues a deprecation warning.  `rtl_watch` will be corrected to use v2 invocation when the RaspiOS Paho-MQTT library has been updated to v2.
 
 On occasion, pressing the **Quit** button in `rtl_watch` results in a hung application (at least on Mac OSX), requiring a forced-quit.  This appears to be related to the Python GIL issue and may disappear in future Python releases or on other systems.
 

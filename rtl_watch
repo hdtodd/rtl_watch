@@ -140,7 +140,6 @@ class Data:
                 self.ITGT = Stats(eTime-self.last_xmt_time)
             else:
                 self.ITGT.append(eTime-self.last_xmt_time)
-            self.last_xmt_time = eTime
             self.xmtcount += 1
             self.last_xmt_time = eTime
         if not omitFreq:
@@ -185,7 +184,6 @@ frm_table  = None
 grp_cnt    = 0
 tbl_width  = 0
 fullscreen = False
-collecting = True    
 bfont      = None
 dfont      = None
 hfont      = None
@@ -437,7 +435,6 @@ def CnvTime(ts):
 ###############################################################################
 # Button action routines
 def sortDevice():
-    global collecting
     row = 1
     for	dev in sorted(devices):
         devices[dev].dRow = row
@@ -446,7 +443,6 @@ def sortDevice():
     return
 
 def sortRecCnt():
-    global collecting
     cntlist = {}
     for dev in devices:
         (pkt,xmt,SNR,ITGT,Freq,PPT) = devices[dev].get()
@@ -461,7 +457,6 @@ def sortRecCnt():
     return
 
 def sortSnr():
-    global collecting
     snrlist = {}
     for dev in devices:
         (pkt,xmt,SNR,ITGT,Freq,PPT) = devices[dev].get()
@@ -478,7 +473,6 @@ def sortSnr():
 ###############################################################################
 # Reset device warnings to OK and rewrite the display table accordingly
 def reset_warn():
-    global collecting
     for dev in devices:
         devices[dev].battery = 1
         devices[dev].wlevel  = Warn.OK
@@ -514,21 +508,7 @@ def quit_prog():
     mqtt.loop_stop()
     mqtt.disconnect()
 
-
-def toggle_collecting(event=None):
-    global collecting
-    if collecting:
-        mqtt.loop_stop()
-        time.sleep(.5)
-        print("Data collection paused ...")
-    else:
-        mqtt.loop_start()
-        print("Data collection resumed ...")
-    collecting = not collecting
-    return
-    
 def print_summary():
-    global collecting
     global devices
     global dedups, totrecs
     global grp_cnt, omitSNR, omitFreq, omitITGT, omitPPT
@@ -575,16 +555,16 @@ def print_summary():
             print("{:<30} {:>8d} {:>8d}".format(dev,pkt,xmt), end="", file=f)
             if not omitSNR:
                 (n,avg,std,min,max) = SNR.get()
-                print("   {:>8.1f} ±{:>5.2f}".format(avg,std), end="", file=f)
+                print("   {:>8.1f} ±{:>6.1f}".format(avg,std), end="", file=f)
             if not omitFreq:
                 (n,avg,std,min,max) = Freq.get()
                 print("   {:>8.3f} ± {:>5.3f}".format(avg,std), end="", file=f)
             if not omitITGT and ITGT is not None:
                 (n,avg,std,min,max) = ITGT.get()
-                print("  {:>8.1f} ±{:>5.2f}".format(avg,std), end="", file=f)
+                print("  {:>8.1f} ±{:>6.1f}".format(avg,std), end="", file=f)
             if not omitPPT and PPT is not None:
                 (n,avg,std,min,max) = PPT.get()
-                print("   {:>8.1f} ±{:>5.2f}".format(avg,std), end="", file=f)
+                print("   {:>8.1f} ±{:>6.1f}".format(avg,std), end="", file=f)
             print(file=f)
         print("\n{:<120}".format("-"*ruler), file=f)
     print("rtl_433_watch summary table appended to file \'rtl-watch.prn'")
@@ -608,7 +588,7 @@ def write_display_row_for_device(dev):
         col = 4
         if not omitSNR:
             tbl[dRow][col].set(round(snr,1))
-            tbl[dRow][col+1].set(round(sigma,2))
+            tbl[dRow][col+1].set(round(sigma,1))
             col += 2
         if not omitFreq:
             (cnt,freq,sigma,min,max) = Freq.get()
@@ -618,12 +598,12 @@ def write_display_row_for_device(dev):
         if not omitITGT and ITGT is not None:
             (cnt,itgt,sigma,min,max) = ITGT.get()
             tbl[dRow][col].set(round(itgt,1))
-            tbl[dRow][col+1].set(round(sigma,2))
+            tbl[dRow][col+1].set(round(sigma,1))
             col += 2
         if not omitPPT and PPT is not None:
             (cnt,ppt,sigma,min,max) = PPT.get()
             tbl[dRow][col].set(round(ppt,1))
-            tbl[dRow][col+1].set(round(sigma,2))
+            tbl[dRow][col+1].set(round(sigma,1))
     except Exception as e:
         print("Exception when trying to set display values for row", dRow)
         print("Exception:", str(e))
@@ -735,12 +715,12 @@ def process_msg(mqtt):
             if dev in devices:
                 dup = devices[dev].update(eTime, snr, freq, battery, status)
             else:
+                dup = False
                 dRow = len(tbl)
                 if debug:
                     print("Appending new device", dev, " to end of tbl at row", dRow)
                 devices[dev] = Data(dev, dRow, eTime, snr, freq, battery, status)
                 add_row(dRow)
-                dup = False
 
             if not dup:
                 dedups += 1
@@ -941,8 +921,6 @@ def create_display():
         tbl[0][col+1].set("PPT\n𝜎")
 
     win.bind('<Escape>', toggle_fullscreen)
-    if debug:
-        win.bind('s', toggle_collecting)
     return
 
 #######################################################################################
@@ -981,7 +959,7 @@ if __name__ == "__main__":
 
     if debug:
         print("Entering main run loops")
-
+        print("  Start packet processing and collecting threads")
     t1 = threading.Thread(target = process_msg, args=(mqtt,))
     t2 = threading.Thread(target = subscribe, args=(mqtt,))
     t1.start()
@@ -992,15 +970,16 @@ if __name__ == "__main__":
     #   to respond to incoming 'msg' packets
     t2.join()
     if debug:
-        print("'subscribe' thread exited but 'on_message' continues")
+        print("'subscribe' collecting thread exited but 'on_message' continues")
 
     # Start window; will be terminated by 'quit_prog'
+    if debug:
+        print("Start window processing thread")
     win.mainloop()
 
     t1.join()
     # Consumer thread, 'process_msg' has stopped: exit
     if debug:
         print("'process_msg' thread terminated; exiting normally")
-    else:
-        print("Quitting ...")
+    print("Quitting ...")
     sys.exit(0)

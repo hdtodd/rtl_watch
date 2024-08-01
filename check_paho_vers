@@ -1,0 +1,10 @@
+#!/usr/bin/env python3
+# CallbackVers
+# Use this to check the paho-mqtt version
+
+import paho.mqtt
+from paho.mqtt import client as mqtt_client
+
+print("paho-mqtt version = ", paho.mqtt.__version__[0])
+
+quit()

@@ -182,7 +182,10 @@ On occasion, pressing the **Quit** button in `rtl_watch` results in a hung appli
 **Quit** on RaspiOS results in a partial exit: press CNTL-C to complete the exit.  This appears to be a result of the older Python Paho-MQTT (version 1.6) on RaspiOS and may be corrected/correctable when that library is updated.
 
 The TOGL button creates a full-screen display, but toggling back to original screen size does not restore the fonts properly.  To be corrrected in subsequent release.
-       
+
+>[!NOTE]
+>`rtl_watch` uses message queuing between process threads to buffer message processing and window updating from packet collection.  It has not been tested on  a single-core system in a high-traffic location and may not be able to respond well in that environment.  If you notice problems, please report them to the author with details about the system on which you're running `rtl_watch`.
+
 ## Related Tools
 These related `rtl_433` tools might also be helpful:
 

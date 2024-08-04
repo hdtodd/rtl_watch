@@ -82,7 +82,7 @@ To install, connect to the an appropriate directory for downloading code and iss
    `git clone http://github.com/hdtodd/rtl_watch`
 then `cd rtl_watch` and `./rtl_watch` to run the program.  See below for options.
 
-Paho-MQTT v2 broke v1 callback invocations, but v2.1.0 of `rtl_watch` incorporates a workaround so that it will operate with either v1.x or v2.x of Paho-MQTT.  However, invocation on a system running v2.x will generate a warning, since `rtl_watch` continues to use the deprecated v1-style callback invocation for now.  `check_paho_vers` is included in this distribution: executing it will tell you which version you're running.
+Paho-MQTT v2 broke v1 callback invocations, but v3 of `rtl_watch` incorporates a workaround so that it will operate with either v1.x or v2.x of Paho-MQTT.  However, invocation on a system running v2.x will generate a warning, since `rtl_watch` continues to use the deprecated v1-style callback invocation for now.  `check_paho_vers` is included in this distribution: executing it will tell you which version you're running.
 
 `rtl_watch` requires that a computer (the "monitoring computer") on your local-area network be running `rtl_433` and re-broadcasting the ISM packets it recognizes as JSON messages via the `mqtt` protocol on the local-area network.  See instructions below if you do not have an `rtl_433` system set up or if it has not been set up to re-broadcast packets through the `mqtt` broker.
 
@@ -115,7 +115,7 @@ The following options may be provided on the command line to provide parameters 
 *  \[`-d` | `--debug`\]  
    Print debugging information on the controlling console
 *  \[`-W` | `--warn`\]  
-   Inject warning notations at packets 20 and 40 to verify operation; required `-d` option enabled
+   Inject warning notations at packets 20 and 40 to verify operation; requires `-d` option also enabled
 *  \[`-v` | `--version`\]  
    Displays the version of rtl_watch.
 
@@ -173,7 +173,7 @@ The developers of `rtl_433` continually update the list of devices that the prog
  
 ## Known Issues
 
-The current version of Python Paho-MQTT is v2 on MacOS Sonoma, Python v3.12.4, and v1.6 on RaspiOS 6.6 Bookworm and Python v3.11.2 as installed with apt-get/pip3.  Paho-MQTT v2 broke the callback invocation for v1.  `rtl_watch` has a workaround (invokes v1 compatibility on a v2 system), but v2 issues a deprecation warning.  `rtl_watch` will be corrected to use v2 invocation when the RaspiOS Paho-MQTT library has been updated to v2.
+The current version of Python Paho-MQTT is v2 on MacOS Sonoma with Python v3.12.4, and it is v1.6 on RaspiOS 6.6 Bookworm with Python v3.11.2 as installed with apt-get/pip3.  Paho-MQTT v2 broke the callback invocation for v1.  `rtl_watch` has a workaround (invokes v1 compatibility on a v2 system), but v2 issues a deprecation warning.  `rtl_watch` will be updated to use v2 invocation when the RaspiOS Paho-MQTT library has been updated to v2.
 
 >[!NOTE]
 >`rtl_watch` uses message queuing between process threads to buffer message processing and window updating from packet collection.  It has not been tested on  a single-core system in a high-traffic location and may not be able to respond well in that environment.  If you notice problems, please report them to the author with details about the system on which you're running `rtl_watch`.

@@ -177,12 +177,6 @@ The developers of `rtl_433` continually update the list of devices that the prog
 
 The current version of Python Paho-MQTT is v2 on MacOS Sonoma, Python v3.12.4, and v1.6 on RaspiOS 6.6 Bookworm and Python v3.11.2 as installed with apt-get/pip3.  Paho-MQTT v2 broke the callback invocation for v1.  `rtl_watch` has a workaround (invokes v1 compatibility on a v2 system), but v2 issues a deprecation warning.  `rtl_watch` will be corrected to use v2 invocation when the RaspiOS Paho-MQTT library has been updated to v2.
 
-On occasion, pressing the **Quit** button in `rtl_watch` results in a hung application (at least on Mac OSX), requiring a forced-quit.  This appears to be related to the Python GIL issue and may disappear in future Python releases or on other systems.
-
-**Quit** on RaspiOS results in a partial exit: press CNTL-C to complete the exit.  This appears to be a result of the older Python Paho-MQTT (version 1.6) on RaspiOS and may be corrected/correctable when that library is updated.
-
-The TOGL button creates a full-screen display, but toggling back to original screen size does not restore the fonts properly.  To be corrrected in subsequent release.
-
 >[!NOTE]
 >`rtl_watch` uses message queuing between process threads to buffer message processing and window updating from packet collection.  It has not been tested on  a single-core system in a high-traffic location and may not be able to respond well in that environment.  If you notice problems, please report them to the author with details about the system on which you're running `rtl_watch`.
 

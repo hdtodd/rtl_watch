@@ -53,8 +53,6 @@ This section is located just below the title bar and provides the following cont
 1. **Togl** toggles the display window between full screen and reduced size.
 1. **Quit** exits the program.  (CNTL-C in the controlling terminal window also works) 
 
-The sort and print functions suspend briefly the processing of any incoming packets, so a small number of packets might be missed as those functions are performed.
-
 Data collection continues until you press the **Quit** button or type the \<CNTL-C\> character on the controlling keyboard.
 
 ### Warning Flags

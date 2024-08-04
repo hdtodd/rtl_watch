@@ -616,32 +616,24 @@ def write_display_row_for_device(dev):
         print("Exception when trying to set display values for row", dRow)
         print("Exception:", str(e))
     return
-        
+
 # Toggle fullscreen
 def toggle_fullscreen(event=None):
     global win
     global fullscreen
 
     fullscreen = not fullscreen
+    if fullscreen:
+        hfont.configure(size=max(36, int((win.winfo_height() / 18))))
+        bfont.configure(size=max(24, int((win.winfo_height() / 24))))
+        dfont.configure(size=max(24, int((win.winfo_height() / 24))))
+        lfont.configure(size=max(30, int((win.winfo_height() / 24))))
+    else:
+        hfont.configure(size=40)
+        bfont.configure(size=24)
+        dfont.configure(size=18)
+        lfont.configure(size=30, weight="bold")
     win.attributes('-fullscreen', fullscreen)
-    resize()
-    return
-
-# Automatically resize font size based on window size
-def resize(event=None):
-    global bfont
-    global dfont
-    global lfont
-    global hfont
-    global win
-
-    # Resize font based on frame height (minimum size of 12)
-    # Use negative number for "pixels" instead of "points"
-    hfont.configure(size=-max(36, int((win.winfo_height() / 18))))
-    bfont.configure(size=-max(24, int((win.winfo_height() / 24))))
-    dfont.configure(size=-max(24, int((win.winfo_height() / 24))))
-    lfont.configure(size=-max(30, int((win.winfo_height() / 24))))
-
     return
 # End display management functions
 
@@ -724,9 +716,6 @@ def process_msg(mqtt):
                 if totrecs==20:
                     battery = 0
                     print(CSIRED, "Inserting battery-low condition for display debugging", CSIBLK)
-
-            print("Totrecs=", totrecs, ", status =", status, ", battery=", battery)
-
 
             if dev in devices:
                 dup = devices[dev].update(eTime, snr, freq, battery, status)

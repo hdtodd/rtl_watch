@@ -50,11 +50,11 @@ import time
 import datetime
 import math
 from   enum import IntEnum
-from queue import Queue
+from   queue import Queue
 import threading
 try:
     import tkinter as tk
-    from tkinter import ttk
+    from   tkinter import ttk
     import tkinter.font as tkFont
     import tkinter.messagebox
 except ImportError:

@@ -70,8 +70,8 @@ The **Reset Warn** button clears both the battery-low and status-change flags fo
 
 The information from `rtl_watch` can be helpful in several ways to understand your ISM neighborhood:
 
-1.  Which devices are closest to you?  High values of SNR mean (e.g., 15-20) and standard deviation indicate that the device is likely close to your RTL-SDR receiver.  Also, high values for packet or transmit count likely indicate a device close to your receiver, as their packets are received routinely, relative to those with low counts (but check correlation with ITGT and PPT).
-1.  Which devices may either be remote or experiencing interference from other devices?  A high standard deviation value for ITGT (inter-transmission gap time) or PPT (packets per transmission) indicate that the transmitting device's packets are not being received routinely.  That could be because of interference from other devices (which prevent the packets from being decoded correctly) or because the device is remote from your receiver (check for correlation SNR mean and standard deviation).
+1.  Which devices are closest to you?  High values of SNR mean (e.g., 15-20) may indicate that the device is close to your RTL-SDR receiver.  Also, high values for packet or transmit count likely indicate a device close to your receiver, as their packets are received routinely, relative to those with low counts (but check correlation with ITGT and PPT).
+1.  Which devices may either be remote or experiencing interference from other devices?  A high standard deviation value for ITGT (inter-transmission gap time) or PPT (packets per transmission) indicate that the transmitting device's packets are not being received routinely.  That could be because of interference from other devices (which prevent the packets from being decoded correctly) or because the device is remote from your receiver (check for correlation with SNR mean and standard deviation).
 1.  Which devices have unreliable oscillators?  A high value for frequency standard deviation likely indicate an unstable (possibly older) device clock.
 
 ## Installing `rtl_watch`
@@ -82,9 +82,9 @@ To install, connect to the an appropriate directory for downloading code and iss
    `git clone http://github.com/hdtodd/rtl_watch`
 then `cd rtl_watch` and `./rtl_watch` to run the program.  See below for options.
 
-`rtl_watch` requires Python3 and Paho-MQTT on the displaying computer and an `rtl_433` system running on your local area network (description in subsequent section).  Paho-MQTT v2 broke v1 callback invocations, but v2.1.0 of `rtl_watch` incorporates a workaround so that it will operate with either v1.x or v2.x of Paho-MQTT.  However, invocation on a system running v2.x will generate a warning, since `rtl_watch` continues to use the deprecated v1-style callback invocation for now.  `check_paho_vers` is included in this distribution: executing it will tell you which version you're running.
+Paho-MQTT v2 broke v1 callback invocations, but v2.1.0 of `rtl_watch` incorporates a workaround so that it will operate with either v1.x or v2.x of Paho-MQTT.  However, invocation on a system running v2.x will generate a warning, since `rtl_watch` continues to use the deprecated v1-style callback invocation for now.  `check_paho_vers` is included in this distribution: executing it will tell you which version you're running.
 
-`rtl_watch` requires that a computer (the "monitoring computer") on your local-area network be running `rtl_433` and re-broadcasting the packets it recognizes as JSON messages via the `mqtt` protocol on the local-area network.  See instructions below if you do not have an `rtl_433` system set up or if it has not been set up to re-broadcast packets through the `mqtt` broker.
+`rtl_watch` requires that a computer (the "monitoring computer") on your local-area network be running `rtl_433` and re-broadcasting the ISM packets it recognizes as JSON messages via the `mqtt` protocol on the local-area network.  See instructions below if you do not have an `rtl_433` system set up or if it has not been set up to re-broadcast packets through the `mqtt` broker.
 
 ## Using `rtl_watch`
 

@@ -485,6 +485,7 @@ def reset_warn():
 # Pop up an info box with descriptions of the headings
 def legend():
     explain = (
+    Warn_Sign+": '?!' means device reported a status change;\n      '!!' ,means battery low\n\n"
     "SNR: Signal-to-Noise Ratio of received radio signals\n\n"
     "Freq: Radio frequency of signal received\n\n"
     "ITGT: Inter-Transmission Gap Time (seconds between transmissions)\n\n"
@@ -671,6 +672,10 @@ def process_msg(mqtt):
     global tbl
     while True:
         msg = msg_q.get()
+        # count this new record
+        totrecs += 1
+
+        # and process it
         if msg == None:
             mqtt.loop_stop()
             if debug:
@@ -705,12 +710,15 @@ def process_msg(mqtt):
 
             # if debuging warnings (-d -W), inject warning conditions at pkts 10, 20
             if debugW:
-                if pktcnt==10:
+                if totrecs==10:
                     status = 9
                     print(CSIMGN, "Inserting status-code change for display debugging", CSIBLK)
-                if pktcnt==20:
+                if totrecs==20:
                     battery = 0
                     print(CSIRED, "Inserting battery-low condition for display debugging", CSIBLK)
+
+            print("Totrecs=", totrecs, ", status =", status, ", battery=", battery)
+
 
             if dev in devices:
                 dup = devices[dev].update(eTime, snr, freq, battery, status)
@@ -731,9 +739,8 @@ def process_msg(mqtt):
                     earliest_time.set( y["time"])
                     first_rec = False
                 last_time.set(y["time"])
-#[hdt]
-            write_display_row_for_device(dev)
 
+            write_display_row_for_device(dev)
             pkt_cnt.set(totrecs)
             xmt_cnt.set(dedups)
             # No return; thread exits when loop_stop() is invoked
@@ -744,8 +751,7 @@ def subscribe(mqtt: mqtt_client):
         global msg_q
         global totrecs
         
-        # count this new record and queue it for processing
-        totrecs += 1
+        # Queue the message for processing and return
         msg_q.put(msg)
         return
         
@@ -754,7 +760,7 @@ def subscribe(mqtt: mqtt_client):
     if debug:
         print("Subscribed to mqtt feed")
     mqtt.loop_start()
-    return #From subscribe(), but 'on_message' is active
+    return #From subscribe(), but 'on_message' is active as mqtt callback
 
 #######################################################################################
 # Table management and display
@@ -772,7 +778,7 @@ def add_row(dRow):
     if dRow==0:
         (bg, fg, fbg, ffg) = ("cornflower blue", "white", "yellow", "black")
     else:
-        (bg, fg, fbg, ffg) = ("white",           "black", "white",  "black")
+        (bg, fg, fbg, ffg) = ("white",           "black", "white",  "red")
 
     lbl_device = tk.Label(row, width=30, textvariable=tbl[dRow][0], font=dfont, bg=bg)
     lbl_flag   = tk.Label(row, width=1,  textvariable=tbl[dRow][1], font=dfont, bg=fbg, fg=ffg)

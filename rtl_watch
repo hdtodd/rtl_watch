@@ -299,9 +299,9 @@ class DoubleScrolledFrame:
 # End class DoubleScrolledFrame()
     
 ###############################################################################
-#  Create the command parser, parse cmd line,  and set defaults
+# Command-line and parameter-setting function
+# Create the parser 
 def make_parser():
-
     parser = argparse.ArgumentParser(
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description=AP_DESCRIPTION, epilog=AP_EPILOG)
@@ -335,8 +335,7 @@ def make_parser():
     return args
 # End make_parser()
 
-###############################################################################
-# Set execution parameters from cmdline
+# Set execution parameters from defaults and the cmdline
 def set_params():
     global host, topic, username, password, port, debug, debugW
     global dup_thresh, tbl_width, grp_cnt
@@ -411,7 +410,9 @@ def set_params():
         print("\tUsing transmission window of", dup_thresh)
         print("\tDisplay table width will be", tbl_width, "columns")
     return
-# End set_params()
+# End set execution parameters from defaults and the cmdline
+# End command-line and parameter-setting function
+
 
 ###############################################################################
 # Convert time from various formats to epoch time
@@ -575,7 +576,7 @@ def print_summary():
         print("\n{:<120}".format("-"*ruler), file=f)
     print("rtl_433_watch summary table appended to file \'rtl-watch.prn'")
     return
-# End button routines
+# End button action routines
 
 ###############################################################################
 # Display management functions
@@ -659,6 +660,7 @@ def connect_mqtt() -> mqtt_client:
         return #from on_connect
 
     # Work around paho-mqtt v1, v2+ Client instantiation parameter diffs
+    #   by invoking v1 compatibility if on a v2 system
     try:
         mqtt = mqtt_client.Client(client_id, clean_session=False)
     except:
@@ -751,7 +753,9 @@ def process_msg(mqtt):
             xmt_cnt.set(dedups)
             # No return; thread exits when loop_stop() is invoked
 
-# Subscribe to rtl_433 publication & process records we receive
+# Subscribe to rtl_433 publication & forward records we receive
+#   through the queue to the processing thread.  Keep
+#   message receipt process as brief as possible
 def subscribe(mqtt: mqtt_client):
     def on_message(mqtt, userdata, msg):
         global msg_q

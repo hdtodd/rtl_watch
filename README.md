@@ -57,7 +57,7 @@ Data collection continues until you press the **Quit** button or type the \<CNTL
 
 ### Warning Flags
 
-`DNT` monitors packets decoded by `rtl_433` for two signals that might indicate that maintenance of a remote sensor is needed:
+`rtl_watch` monitors packets decoded by `rtl_433` for two signals that might indicate that maintenance of a remote sensor is needed:
 
 1. *Battery Low* is indicated by "!!" in the warning flags column.  Though not universally standard, devices generally indicate an impending low-battery condition by changing the `battery_low` flag from 1 to 0 in its broadcast packets.  *Any* occurence of `battery_low` = 0 causes `DNT` to post the "!!" warning flag for that device.  That flag is sticky: the warning flag remains, even if `battery_low` returns to 1, since the battery voltage may be fluctuating with ambient temperature and the device may need attention in any case.
 1. *Status Change* is indicated by "?!" in the warning flags column.  The remote-device status field is not present in the packets for all devices and is not standardized.  But a change in status may indicate that the device needs attention and so is flagged.  The "Status Change" flag is also sticky: once set for a device, it remains set despite any subsequent changes in packet status field values.

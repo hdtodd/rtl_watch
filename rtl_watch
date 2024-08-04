@@ -73,6 +73,57 @@ AP_EPILOG="""
 """
 
 ###################################################################################
+# Global variable initialization
+
+# MQTT connection management
+# Parameters used to establish the mqtt connection to the rtl_433
+#   receiver mqtt publisher
+host      = None
+topic     = "rtl_433/+/events"
+port      = 1883
+username  = ""
+password  = ""
+client_id = f'python-mqtt-{random.randint(0, 100)}'
+
+# Variables and constants used globally
+win        = None
+frm_table  = None
+grp_cnt    = 0
+tbl_width  = 0
+fullscreen = False
+bfont      = None
+dfont      = None
+hfont      = None
+lfont      = None
+pktcnt     = 0
+totrecs    = 0
+first_rec  = True
+noTPMS     = True
+omitSNR    = False
+omitITGT   = False
+omitFreq   = False
+omitPPT    = False
+debug      = False
+debugW     = False
+CSIBLK     = "\033[30m"
+CSIRED     = "\033[31m"
+CSIYLW     = "\033[93m"
+CSIMGN     = "\033[95m"
+CSIBLU     = "\033[34m"
+CSIGRN     = "\033[32m"
+Warn_Sign  = "\U000026A0"
+bl_flag    = "\U0000203C"  # '!!': want to use "\U0001FAAB" {low battery} but not available
+st_flag    = "\U00002049"  # '?!'
+Warnings   = [" ", st_flag, bl_flag]
+Warn       = IntEnum('Warn', [ ('OK', 0), ('ALERT', 1), ('ALARM', 2)])
+
+global exit_event
+global msg_q
+
+# Set 2-sec threshhold for rejecting duplicate records
+dup_thresh = 2.0
+
+###################################################################################
 # A class to compute mean, standard deviation, min, and max of a stream  of numbers
 class Stats():
 
@@ -94,6 +145,7 @@ class Stats():
 
    def get(self):
       return (self.count, self.mean, math.sqrt(self.std2), self.min, self.max)
+# End class Stats()
 
 ##########################################################################################
 # Define a class to hold the data for each device and procedures to create, update, access
@@ -164,57 +216,7 @@ class Data:
                 self.ITGT,
                 self.Freq,
                 self.PPT)
-
-###################################################################################
-# Global variable initialization
-
-# MQTT connection management
-# Parameters used to establish the mqtt connection to the rtl_433
-#   receiver mqtt publisher
-host      = None
-topic     = "rtl_433/+/events"
-port      = 1883
-username  = ""
-password  = ""
-client_id = f'python-mqtt-{random.randint(0, 100)}'
-
-# Variables and constants used globally
-win        = None
-frm_table  = None
-grp_cnt    = 0
-tbl_width  = 0
-fullscreen = False
-bfont      = None
-dfont      = None
-hfont      = None
-lfont      = None
-pktcnt     = 0
-totrecs    = 0
-first_rec  = True
-noTPMS     = True
-omitSNR    = False
-omitITGT   = False
-omitFreq   = False
-omitPPT    = False
-debug      = False
-debugW     = False
-CSIBLK     = "\033[30m"
-CSIRED     = "\033[31m"
-CSIYLW     = "\033[93m"
-CSIMGN     = "\033[95m"
-CSIBLU     = "\033[34m"
-CSIGRN     = "\033[32m"
-Warn_Sign  = "\U000026A0"
-bl_flag    = "\U0000203C"  # '!!': want to use "\U0001FAAB" {low battery} but not available
-st_flag    = "\U00002049"  # '?!'
-Warnings   = [" ", st_flag, bl_flag]
-Warn       = IntEnum('Warn', [ ('OK', 0), ('ALERT', 1), ('ALARM', 2)])
-
-global exit_event
-global msg_q
-
-# Set 2-sec threshhold for rejecting duplicate records
-dup_thresh = 2.0
+# End class Data()
 
 ##########################################################################################
 # DoubleScrolledFrame class adapted from
@@ -294,7 +296,8 @@ class DoubleScrolledFrame:
     
     def __str__(self):
         return str(self.outer)
-
+# End class DoubleScrolledFrame()
+    
 ###############################################################################
 #  Create the command parser, parse cmd line,  and set defaults
 def make_parser():
@@ -330,6 +333,7 @@ def make_parser():
     parser.add_argument("-v", "--version", action="version", version=VERSION)
     args = parser.parse_args()
     return args
+# End make_parser()
 
 ###############################################################################
 # Set execution parameters from cmdline
@@ -407,7 +411,7 @@ def set_params():
         print("\tUsing transmission window of", dup_thresh)
         print("\tDisplay table width will be", tbl_width, "columns")
     return
-
+# End set_params()
 
 ###############################################################################
 # Convert time from various formats to epoch time
@@ -430,10 +434,11 @@ def CnvTime(ts):
             sys.exit(1)
 
     return(eTime)
-
+# End CnvTime()
 
 ###############################################################################
 # Button action routines
+# Sort table alphabetically by device name
 def sortDevice():
     row = 1
     for	dev in sorted(devices):
@@ -442,6 +447,7 @@ def sortDevice():
         row += 1
     return
 
+# Sort table by decreasing record count
 def sortRecCnt():
     cntlist = {}
     for dev in devices:
@@ -456,6 +462,7 @@ def sortRecCnt():
         row += 1
     return
 
+# Sort table by decreasing value of SNR
 def sortSnr():
     snrlist = {}
     for dev in devices:
@@ -470,7 +477,6 @@ def sortSnr():
         row += 1
     return
 
-###############################################################################
 # Reset device warnings to OK and rewrite the display table accordingly
 def reset_warn():
     for dev in devices:
@@ -481,11 +487,10 @@ def reset_warn():
         tbl[row][1].set(Warnings[Warn.OK])
     return
 
-###############################################################################
 # Pop up an info box with descriptions of the headings
 def legend():
     explain = (
-    Warn_Sign+": '?!' means device reported a status change;\n      '!!' ,means battery low\n\n"
+    Warn_Sign+": '?!' means device reported a status change;\n      '!!' means battery low\n\n"
     "SNR: Signal-to-Noise Ratio of received radio signals\n\n"
     "Freq: Radio frequency of signal received\n\n"
     "ITGT: Inter-Transmission Gap Time (seconds between transmissions)\n\n"
@@ -494,7 +499,6 @@ def legend():
     tk.messagebox.showinfo(title="Headings Legend", message=explain)
     return
 
-###############################################################################
 # CNTL-C and QUIT button handler
 def quit_prog():
     global exit_event
@@ -509,6 +513,7 @@ def quit_prog():
     mqtt.loop_stop()
     mqtt.disconnect()
 
+# Print a summary table by appending to file "rtl-watch.prn"    
 def print_summary():
     global devices
     global dedups, totrecs
@@ -570,9 +575,10 @@ def print_summary():
         print("\n{:<120}".format("-"*ruler), file=f)
     print("rtl_433_watch summary table appended to file \'rtl-watch.prn'")
     return
+# End button routines
 
 ###############################################################################
-# Functions for displaying
+# Display management functions
 
 # Write the row on the display for device "dev"
 def write_display_row_for_device(dev):
@@ -636,7 +642,7 @@ def resize(event=None):
     lfont.configure(size=-max(30, int((win.winfo_height() / 24))))
 
     return
-
+# End display management functions
 
 ###############################################################################
 # MQTT functions and display updating
@@ -651,7 +657,7 @@ def connect_mqtt() -> mqtt_client:
             print("Return code %d\n", rc)
             sys.exit(1)
         return #from on_connect
-    
+
     # Work around paho-mqtt v1, v2+ Client instantiation parameter diffs
     try:
         mqtt = mqtt_client.Client(client_id, clean_session=False)
@@ -761,9 +767,10 @@ def subscribe(mqtt: mqtt_client):
         print("Subscribed to mqtt feed")
     mqtt.loop_start()
     return #From subscribe(), but 'on_message' is active as mqtt callback
+# End MQTT functions and display updating
 
 #######################################################################################
-# Table management and display
+# Table management and display functions
 
 # Add a row to the display table, "tbl", at current next-entry index and increment the index                         
 # Format the widgets, and handle row 0 differently as it is the header                                               
@@ -817,8 +824,6 @@ def add_row(dRow):
     row.pack(side="top")
     return
 
-
-###############################################################################               
 # Create the display panels and table section                                                 
 def create_display():
     global win, frm_table, bfont, dfont, hfont, lfont
@@ -928,6 +933,7 @@ def create_display():
 
     win.bind('<Escape>', toggle_fullscreen)
     return
+# End table management and display functions
 
 #######################################################################################
 #  Main script
@@ -989,3 +995,5 @@ if __name__ == "__main__":
         print("'process_msg' thread terminated; exiting normally")
     print("Quitting ...")
     sys.exit(0)
+
+# End main script

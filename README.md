@@ -80,7 +80,7 @@ The information from `rtl_watch` can be helpful in several ways to understand yo
 
 To install, connect to an appropriate directory for downloading code and issue the command
    `git clone http://github.com/hdtodd/rtl_watch`
-then `cd rtl_watch` and `./rtl_watch` to run the program.  See below for options.
+then `cd rtl_watch` and `./rtl_watch` to run the program.  See below for command-line options.
 
 Paho-MQTT v2 broke v1 callback invocations, but v3 of `rtl_watch` incorporates a workaround so that it will operate with either v1.x or v2.x of Paho-MQTT.  However, invocation on a system running v2.x will generate a warning, since `rtl_watch` continues to use the deprecated v1-style callback invocation for now.  `check_paho_vers` is included in this distribution: executing it will tell you which version you're running.
 

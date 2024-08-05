@@ -78,7 +78,7 @@ The information from `rtl_watch` can be helpful in several ways to understand yo
 
 `rtl_watch` is a Python3 program.  It requires that the Python packages `tkinter` and `paho-mqtt` be installed on the computer on which `rtl_watch` is invoked.  `rtl_watch` has been tested on Mac OSX Catalina and Sonoma and Raspbian Bullseye and Bookworm. On Mac OSX, you may need to install Python3 if you haven't already done so ( <https://www.python.org/downloads/macos/> ).
 
-To install, connect to the an appropriate directory for downloading code and issue the command
+To install, connect to an appropriate directory for downloading code and issue the command
    `git clone http://github.com/hdtodd/rtl_watch`
 then `cd rtl_watch` and `./rtl_watch` to run the program.  See below for options.
 

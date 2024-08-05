@@ -27,7 +27,7 @@ This section provides general information about the monitoring process.  It indi
 1. the date and time of the earliest and latest transmission observed.
 
 ### The Lower Information Section
-This section is the table of characteristics of the signals observed from the each device:
+This section is the table of characteristics of the signals observed from each device:
 
 1. the device name, which is a concatenated string of "device model"/"channel"/"device id", as observed and reported by `rtl_433`;
 1. warning flags observed from the device (see below);

@@ -431,7 +431,7 @@ def CnvTime(ts):
     else:
         try:
             eTime = float(ts)
-            timestamp = datetime.fromtimestamp(eTime)
+            timestamp = datetime.datetime.fromtimestamp(eTime)
         except ValueError as e:
             err = {}
             print("Datetime conversion failed on line with datetime string", ts)

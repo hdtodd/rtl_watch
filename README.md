@@ -1,4 +1,4 @@
-# rtl\_watch: Real-time rtl\_433 monitor v3.0.0
+# rtl\_watch: Real-time rtl\_433 monitor v3.0.1
 ## Catalog and characterize ISM devices using rtl\_433
 
 `rtl_watch` monitors output from `rtl_433` to display, in real time, the characteristics of the ISM-band devices broadcasting in your neighborhood.

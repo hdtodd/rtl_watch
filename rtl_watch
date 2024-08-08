@@ -1,6 +1,6 @@
 #! /usr/bin/env python3
 #  rtl_watch
-VERSION="3.0.0"
+VERSION="3.0.1"
 
 #  Python program for real-time monitoring of ISM packets.
 #
@@ -415,11 +415,14 @@ def set_params():
 
 
 ###############################################################################
-# Convert time from various formats to epoch time
+# Convert time string (ts) from ISO format to epoch time
+# Or, if ts is in epoch time, convert to timestamp format.
+# Return both formats for use in processing and displaying
 def CnvTime(ts):
     if ts.find("-") > 0:
         try:
             eTime = datetime.datetime.fromisoformat(ts).timestamp()
+            timestamp = ts
         except ValueError as e:
             err={}
             print("datetime error in input line converting time string: ", ts)
@@ -428,13 +431,14 @@ def CnvTime(ts):
     else:
         try:
             eTime = float(ts)
+            timestamp = datetime.fromtimestamp(eTime)
         except ValueError as e:
             err = {}
             print("Datetime conversion failed on line with datetime string", ts)
             print("float() error msg:", err.get("error", str(e)))
             sys.exit(1)
 
-    return(eTime)
+    return(timestamp, eTime)
 # End CnvTime()
 
 ###############################################################################
@@ -702,7 +706,7 @@ def process_msg(mqtt):
                 dev += str(y["id"])
 
             # Convert data values to standard form
-            eTime   = CnvTime(y["time"])
+            (ts,eTime)   = CnvTime(y["time"])
             snr     = 0.0 if "snr"  not in y else float(y['snr'])
             freq    = 0.0 if "freq" not in y else float(y["freq"])
             battery = None if "battery_ok" not in y else y["battery_ok"]
@@ -733,9 +737,9 @@ def process_msg(mqtt):
                     print("{:<25} {:<20} snr={:>4.1f}".format(dev, y["time"], snr) )
 
                 if first_rec:
-                    earliest_time.set( y["time"])
+                    earliest_time.set(ts)
                     first_rec = False
-                last_time.set(y["time"])
+                last_time.set(ts)
 
             write_display_row_for_device(dev)
             pkt_cnt.set(totrecs)

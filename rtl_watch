@@ -55,6 +55,7 @@ import math
 from   enum import IntEnum
 from   queue import Queue
 import threading
+import requests
 try:
     import tkinter as tk
     from   tkinter import ttk
@@ -81,8 +82,9 @@ AP_EPILOG="""
 # MQTT connection management
 # Parameters used to establish the mqtt connection to the rtl_433
 #   receiver mqtt publisher
-source    = None
+
 host      = None
+port      = None
 topic     = "rtl_433/+/events"
 Mport     = 1883
 Hport     = 8433 
@@ -124,6 +126,7 @@ Warn       = IntEnum('Warn', [ ('OK', 0), ('ALERT', 1), ('ALARM', 2)])
 
 global exit_event
 global msg_q
+global source
 
 # Set 2-sec threshhold for rejecting duplicate records
 dup_thresh = 2.0
@@ -312,7 +315,7 @@ def make_parser():
         description=AP_DESCRIPTION, epilog=AP_EPILOG)
 
     parser.add_argument("-S", "--source", dest="source", type=str,
-                        choices=["HTTP", "MQTT"], default="HTTP",
+                        choices=["HTTP", "MQTT"], default="MQTT",
                         help="Connect to source with HTTP streaming or MQTT?")
     parser.add_argument("-H", "--host", dest="host", type=str, default=host,
                         help="HTTP or MQTT hostname to connect to (default: %(default)s)")
@@ -350,6 +353,7 @@ def set_params():
     args = make_parser()
 
     #  We need to know if we're connecting to the source via HTTP or MQTT
+    #  Should be set to MQTT by parser by default, but check
     if not args.source:
         if source is None:
             args.source = input("Connect to source via HTTP or MQTT?: ")
@@ -380,8 +384,8 @@ def set_params():
                 if 'HTTP_PORT' in os.environ:
                     args.port = os.environ['HTTP_PORT']
                 else:
-                    args.port=Mport
-                    source = "MQTT"
+                    args.port=Hport
+                    source = "HTTP"
     
     if not args.topic:
         if "MQTT_TOPIC" in os.environ:
@@ -539,13 +543,16 @@ def quit_prog():
     global msg_q
     global mqtt
     global win
+    global source
     if debug:
         print("Quitting from quit_prog")
     exit_event.set()
     msg_q.put(None)
     win.destroy()
-    mqtt.loop_stop()
-    mqtt.disconnect()
+    if source=="MQTT":
+        mqtt.loop_stop()
+        mqtt.disconnect()
+    return
 
 # Print a summary table by appending to file "rtl-watch.prn"    
 def print_summary():
@@ -696,23 +703,25 @@ def connect_mqtt() -> mqtt_client:
     return mqtt #from connect_mqtt()
 
 # Process messages that are put into the queue by 'on_message'
-def process_msg(mqtt):
+def process_msg():
+    global source
     global exit_event
     global msg_q
     global first_rec, last_rec
     global devices
     global dedups, totrecs
     global tbl
-    while True:
+    while not exit_event.is_set():
         msg = msg_q.get()
         # count this new record
         totrecs += 1
 
         # and process it
         if msg == None:
-            mqtt.loop_stop()
+            if source=="MQTT":
+                mqtt.loop_stop()
             if debug:
-                print("Stop mqtt loop in 'process_msg'")
+                print("Stop processing thread in 'process_msg'")
             break
         else:
             # Parse the json payload and process
@@ -773,7 +782,8 @@ def process_msg(mqtt):
             write_display_row_for_device(dev)
             pkt_cnt.set(totrecs)
             xmt_cnt.set(dedups)
-            # No return; thread exits when loop_stop() is invoked
+            # No return; thread exits when exit_event is set
+            #   or when a 'None' message is received from data collector
 
 # Subscribe to rtl_433 publication & forward records we receive
 #   through the queue to the processing thread.  Keep
@@ -794,6 +804,88 @@ def subscribe(mqtt: mqtt_client):
     mqtt.loop_start()
     return #From subscribe(), but 'on_message' is active as mqtt callback
 # End MQTT functions and display updating
+
+
+#######################################################################################
+#  HTTP functions
+
+def consumer():
+    global msg_q
+    global exit_event
+
+    #  As long as 'exit_event' hasn't been set and
+    #    'producer' hasn't sent a 'None' message, loop and process msgs
+    while not exit_event.is_set():
+        line = msg_q.get()
+        if line == None:
+            if debug:
+                print("Got null msg in consumer; break from loop")
+            break
+        try:
+            # Decode the message as JSON
+            data = json.loads(line)
+            if debug:
+                print(CSIRED,data,CSIBLK)
+            process(data)
+            
+        except KeyError:
+            # Ignore unknown message data and continue
+            if debug:
+                print(CSIRED,"Unable to recognize line: ", line, CSIBLK)
+            pass
+
+        except ValueError as e:
+            # Warn on decoding errors
+            print(CSIRED,f'Event format not recognized: {e}', CSIBLK)
+
+    #  We get here if 'exit_event' has been set; just return and exit thread
+    if debug:
+        print("Exiting 'consumer'")
+    return
+
+#############################################################################
+#  Message producer thread
+#  Listen for streamed http messages until 'exit_event' has been set,
+#    telling us to exit and close this thread.
+def producer():
+    global debug
+    global msq_queue
+    global exit_event
+    url = f'http://{host}:{port}/stream'
+    headers = {'Accept': 'application/json'}
+
+    # We receive JSON events, one per line terminated with CRLF.
+    # On Events and Stream endpoints a keep-alive of CRLF will be send every 60 seconds.
+    response = requests.get(url, headers=headers, timeout=70, stream=True)
+    print(f'Connected to {url}')
+
+    try:
+        # Open the HTTP (line) streaming API of JSON events
+        for line in response.iter_lines():
+            if debug:
+                print(line)
+            line = line.rstrip()
+            if not line:
+                # filter out keep-alive empty lines
+                continue
+            #  We have a message.  Queue the message for processing
+            msg_q.put(line)
+            if exit_event.is_set():
+                break
+
+    except requests.ConnectionError:
+        print('Connection failed, retrying...')
+        sleep(5)
+        response = requests.get(url, headers=headers, timeout=70, stream=True)
+        print(f'Connected to {url}')
+
+    #  We get here when 'exit_event' has been set externally
+    #  Tell the consumer to quit by sending a 'None' message and return
+    #    to caller, terminating this thread
+    msg_q.put(None)
+    print('\nHTTP message collector exiting.')
+    return
+
 
 #######################################################################################
 # Table management and display functions
@@ -971,6 +1063,9 @@ if __name__ == "__main__":
 
     global msg
     global userdata
+    global exit_event
+    global source
+
     userdata = None
     exit_event = threading.Event()
     msg_q = Queue(0)
@@ -996,29 +1091,42 @@ if __name__ == "__main__":
     # Connect to the mqtt host and subscribe to the feed.
     # This activates the on_message procedure in which
     #   MQTT events cause the displayed values to be updated
-    mqtt = connect_mqtt()
+    if source=="MQTT":
+        mqtt = connect_mqtt()
 
     if debug:
         print("Entering main run loops")
         print("  Start packet processing and collecting threads")
-    t1 = threading.Thread(target = process_msg, args=(mqtt,))
-    t2 = threading.Thread(target = subscribe, args=(mqtt,))
-    t1.start()
-    t2.start()
+
+    # Start the comsumer and producer threads.  Common consumer,
+    #  but different methods for consumer for MQTT & HTTP
+    c = threading.Thread(target = process_msg, args=())
+    if source=="MQTT":
+        p = threading.Thread(target = subscribe, args=(mqtt,))
+    else:
+        if source=="HTTP":
+            p = threading.Thread(target = producer, args=())
+        else:
+            print("?No protocol specified for connecting to data source.  Specify with '-S'")
+            sys.exit(1)
+            
+    c.start()
+    p.start()
     # Start the tkinter main loop and let MQTT events populate the display
+
+    win.mainloop()
 
     # Subscribe returns immediately but 'on_message' continues
     #   to respond to incoming 'msg' packets
-    t2.join()
+    p.join()
     if debug:
         print("'subscribe' collecting thread exited but 'on_message' continues")
 
     # Start window; will be terminated by 'quit_prog'
     if debug:
         print("Start window processing thread")
-    win.mainloop()
 
-    t1.join()
+    c.join()
     # Consumer thread, 'process_msg' has stopped: exit
     if debug:
         print("'process_msg' thread terminated; exiting normally")

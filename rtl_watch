@@ -4,15 +4,18 @@ VERSION="4.0.0"
 
 #  Python program for real-time monitoring of ISM packets.
 #
-#  Monitors mqtt packets from a computer running rtl_433 to
+#  Monitors message packets from a computer running rtl_433 to
 #  collect data from and analyze characteristics of ISM-band
 #  remote-sensing device transmissions (433MHz in the US).
 #
+#  This version can connect to the monitoring system via
+#  MQTT or HTTP protocol.
+#
 #  rtl_433 on the monitoring computer analyzes radio packets
 #  and broadcasts the information in JSON format for
-#  recognized packets via mqtt broker host
+#  recognized packets via mqtt broker host or http streaming
 #
-#  rtl_watch subscribes to that published mqtt stream to
+#  rtl_watch subscribes to that published mqtt or http stream to
 #  record, count, and analyze signal strength and other date
 #  for packets received by that RTL_SDR dongle.  rtl_watch can
 #  run on the monitoring computer or any number of other computers
@@ -364,6 +367,8 @@ def set_params():
                 if host is None:
                     args.host = input("HTTP/MQTT host name or IP: ")
 
+    #  Set connection parameters from env if possible
+    #  If source is not specified, default to MQTT for historic compatibility
     if not args.port:
         if source=="MQTT":
             if 'MQTT_PORT' in os.environ:
@@ -375,7 +380,8 @@ def set_params():
                 if 'HTTP_PORT' in os.environ:
                     args.port = os.environ['HTTP_PORT']
                 else:
-                    args.port=Hport
+                    args.port=Mport
+                    source = "MQTT"
     
     if not args.topic:
         if "MQTT_TOPIC" in os.environ:
@@ -905,7 +911,10 @@ def create_display():
     pkt_cnt.set(totrecs)
     xmt_cnt = tk.StringVar()
     xmt_cnt.set(dedups)
-    lbl_monitor = tk.Label(frm_info, text="Monitoring host: %s and topic: %s" % (host, topic), font=dfont)
+    if source=="MQTT":
+        lbl_monitor = tk.Label(frm_info, text="Connected via %s to  host: %s, port %s, and topic: %s" % (source, host, port, topic), font=dfont)
+    else:
+        lbl_monitor = tk.Label(frm_info, text="Connected via %s to  host: %s and port: %s" % (source, host, port), font=dfont)
     lbl_monitor.pack(side="top", padx=5, pady=5)
     lbl_pkt = tk.Label(frm_info, text="Total pkts received:", font=dfont)
     lbl_pkt.pack(side="left", padx=5, pady=5)

@@ -41,6 +41,8 @@ VERSION="4.0.0"
 #         improved window handling, improved parameter-setting
 #  V3.0.0 modifications 2024.07: use a queue and threads to
 #         catch and records all packets
+#  V4.0.0 Add support for HTTP streaming as the data source
+#
 
 import argparse
 import sys
@@ -70,7 +72,7 @@ except ImportError:
 
 AP_DESCRIPTION="""
 rtl_433_watch:  Real-time monitor for ISM-band device transmissions
-                as observed and published via MQTT by rtl_433.
+                as observed and published by rtl_433 via MQTT or HTTP
 """
 
 AP_EPILOG="""
@@ -94,6 +96,8 @@ password  = ""
 client_id = f'python-mqtt-{random.randint(0, 100)}'
 
 # Variables and constants used globally
+HTTP       = 0
+MQTT       = 1
 win        = None
 frm_table  = None
 grp_cnt    = 0
@@ -315,7 +319,7 @@ def make_parser():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description=AP_DESCRIPTION, epilog=AP_EPILOG)
 
-    parser.add_argument("-S", "--source", dest="source", type=str,
+    parser.add_argument("-S", "--source", dest="source_str", type=str,
                         choices=["HTTP", "MQTT"], default="MQTT",
                         help="Connect to source with HTTP streaming or MQTT?")
     parser.add_argument("-H", "--host", dest="host", type=str, default=host,
@@ -356,18 +360,21 @@ def set_params():
 
     #  We need to know if we're connecting to the source via HTTP or MQTT
     #  Should be set to MQTT by parser by default, but check
-    if not args.source:
+    if not args.source_str:
         if source is None:
-            args.source = input("Connect to source via HTTP or MQTT?: ")
-    source = args.source
+            while True:
+                args.source_str = input("Connect to source via HTTP or MQTT?: ")
+                if args.source_str=="HTTP" or args.source_str=="MQTT":
+                    break
+    source = HTTP if args.source_str=="HTTP" else MQTT
     
     #  We need host and topic, so if not already provided by
     #    cmdline, env, or embedded source code, then ask for them
     if not args.host:
-        if source=="MQTT" and "MQTT_HOST" in os.environ:
+        if source==MQTT and "MQTT_HOST" in os.environ:
             args.host = os.environ["MQTT_HOST"]
         else:
-            if source=="HTTP" and "HTTP_HOST" in os.environ:
+            if source==HTTP and "HTTP_HOST" in os.environ:
                 args.host = os.environ["HTTP_HOST"]
             else:
                 if host is None:
@@ -376,20 +383,22 @@ def set_params():
     #  Set connection parameters from env if possible
     #  If source is not specified, default to MQTT for historic compatibility
     if not args.port:
-        if source=="MQTT":
-            if 'MQTT_PORT' in os.environ:
-                args.port = os.environ['MQTT_PORT']
+        if source==MQTT:
+            if "MQTT_PORT" in os.environ:
+                args.port = os.environ["MQTT_PORT"]
+            else:
+                args.port = Mport
+        else:
+            if source==HTTP:
+                if "HTTP_PORT" in os.environ:
+                    args.port = os.environ["HTTP_PORT"]
+                else:
+                    args.port = Hport
             else:
                 args.port=Mport
-        else:
-            if source=="HTTP":
-                if 'HTTP_PORT' in os.environ:
-                    args.port = os.environ['HTTP_PORT']
-                else:
-                    args.port=Hport
-                    source = "HTTP"
+                source = MQTT
     
-    if not args.topic:
+    if source==MQTT and not args.topic:
         if "MQTT_TOPIC" in os.environ:
             args.topic = os.environ["MQTT_TOPIC"]
         else:
@@ -398,13 +407,13 @@ def set_params():
 
     #  username and password may not be required, so don't prompt
     #    if not already provided; and port just defaults in parser
-    if not args.username and 'MQTT_USERNAME' in os.environ:
-        args.username = os.environ['MQTT_USERNAME']
+    if not args.username and "MQTT_USERNAME" in os.environ:
+        args.username = os.environ["MQTT_USERNAME"]
     else:
         args.username = ""
 
-    if not args.password and 'MQTT_PASSWORD' in os.environ:
-        args.password = os.environ['MQTT_PASSWORD']
+    if not args.password and "MQTT_PASSWORD" in os.environ:
+        args.password = os.environ["MQTT_PASSWORD"]
     else:
         args.password = ""
 
@@ -431,7 +440,7 @@ def set_params():
     if debug:
         print("Debug is ON")
         print("Parameter settings in execution are ...")
-        print("\tConnect to data source via ", source)
+        print("\tConnect to data source via ", "HTTP" if source==HTTP else "MQTT")
         print("\tHTTP/MQTT host:    ", host)
         print("\tHTTP/MQTT port:    ", port)
         print("\tMQTT topic:   ", topic)
@@ -439,8 +448,8 @@ def set_params():
         print("\tMQTT password:", password)
         print("\tDebug warnings", debugW)
         print("\tIncluding" if not omitSNR  else "\tExcluding", "SNR Stats")
-        print("\tIncluding" if not omitITGT else "\tExcluding", "ITGT Stats")
         print("\tIncluding" if not omitFreq else "\tExcluding", "Freq Stats")
+        print("\tIncluding" if not omitITGT else "\tExcluding", "ITGT Stats")
         print("\tExcluding" if     noTPMS   else "\tIncluding", "TPMS devices")
         print("\tUsing transmission window of", dup_thresh)
         print("\tDisplay table width will be", tbl_width, "columns")
@@ -550,10 +559,10 @@ def quit_prog():
         print("Quitting from quit_prog")
     exit_event.set()
     msg_q.put(None)
-    if source=="HTTP":
+    if source==HTTP:
         print(CSIGRN, "\n\nWait for data collection to complete ...", CSIBLK)
     win.destroy()
-    if source=="MQTT":
+    if source==MQTT:
         mqtt.loop_stop()
         mqtt.disconnect()
     return
@@ -721,7 +730,7 @@ def process_msg():
 
         # If it's a null message, that's our signal to quit
         if msg == None:
-            if source=="MQTT":
+            if source==MQTT:
                 mqtt.loop_stop()
             if debug:
                 print("Stop processing thread in 'process_msg'")
@@ -730,14 +739,14 @@ def process_msg():
             # It's a real message, so process it if we can parse it
             # First, try to parse the json payload
             try:
-                if source=="MQTT":
+                if source==MQTT:
                     y = json.loads(msg.payload.decode())
                 else:
                     y = json.loads(codecs.decode(msg,"utf-8"))
             except:
                 # Nope, can't serialize the packet
                 print("Unable to load JSON fields from record:\n\t", end="")
-                if source=="MQTT":
+                if source==MQTT:
                     print(msg.payload.decode())
                 else:
                     print(codecs.decode(msg,"utf-8"))
@@ -807,7 +816,7 @@ def process_msg():
 # Subscribe to rtl_433 publication & forward records we receive
 #   through the queue to the processing thread.  Keep
 #   message receipt process as brief as possible
-def subscribe(mqtt: mqtt_client):
+def mqtt_subscribe(mqtt: mqtt_client):
     def on_message(mqtt, userdata, msg):
         global msg_q
         global totrecs
@@ -821,52 +830,16 @@ def subscribe(mqtt: mqtt_client):
     if debug:
         print("Subscribed to mqtt feed")
     mqtt.loop_start()
-    return #From subscribe(), but 'on_message' is active as mqtt callback
+    return #From mqtt_subscribe(), but 'on_message' is active as mqtt callback
 # End MQTT functions and display updating
 
 
 #######################################################################################
 #  HTTP functions
-
-def consumer():
-    global msg_q
-    global exit_event
-
-    #  As long as 'exit_event' hasn't been set and
-    #    'producer' hasn't sent a 'None' message, loop and process msgs
-    while not exit_event.is_set():
-        line = msg_q.get()
-        if line == None:
-            if debug:
-                print("Got null msg in consumer; break from loop")
-            break
-        try:
-            # Decode the message as JSON
-            data = json.loads(line)
-            if debug:
-                print(CSIRED,data,CSIBLK)
-            process(data)
-            
-        except KeyError:
-            # Ignore unknown message data and continue
-            if debug:
-                print(CSIRED,"Unable to recognize line: ", line, CSIBLK)
-            pass
-
-        except ValueError as e:
-            # Warn on decoding errors
-            print(CSIRED,f'Event format not recognized: {e}', CSIBLK)
-
-    #  We get here if 'exit_event' has been set; just return and exit thread
-    if debug:
-        print("Exiting 'consumer'")
-    return
-
-#############################################################################
-#  Message producer thread
+#  Message producer thread for http stream
 #  Listen for streamed http messages until 'exit_event' has been set,
 #    telling us to exit and close this thread.
-def producer():
+def http_subscribe():
     global debug
     global msq_queue
     global exit_event
@@ -904,7 +877,6 @@ def producer():
     msg_q.put(None)
     print('\nHTTP message collector exiting.')
     return
-
 
 #######################################################################################
 # Table management and display functions
@@ -1022,10 +994,10 @@ def create_display():
     pkt_cnt.set(totrecs)
     xmt_cnt = tk.StringVar()
     xmt_cnt.set(dedups)
-    if source=="MQTT":
-        lbl_monitor = tk.Label(frm_info, text="Connected via %s to  host: %s, port %s, and topic: %s" % (source, host, port, topic), font=dfont)
+    if source==MQTT:
+        lbl_monitor = tk.Label(frm_info, text="Connected via MQTT to  host: %s, port %s, and topic: %s" % (host, port, topic), font=dfont)
     else:
-        lbl_monitor = tk.Label(frm_info, text="Connected via %s to  host: %s and port: %s" % (source, host, port), font=dfont)
+        lbl_monitor = tk.Label(frm_info, text="Connected via HTTP to  host: %s and port: %s" % (host, port), font=dfont)
     lbl_monitor.pack(side="top", padx=5, pady=5)
     lbl_pkt = tk.Label(frm_info, text="Total pkts received:", font=dfont)
     lbl_pkt.pack(side="left", padx=5, pady=5)
@@ -1110,21 +1082,21 @@ if __name__ == "__main__":
     # Connect to the mqtt host and subscribe to the feed.
     # This activates the on_message procedure in which
     #   MQTT events cause the displayed values to be updated
-    if source=="MQTT":
+    if source==MQTT:
         mqtt = connect_mqtt()
 
     if debug:
         print("Entering main run loops")
-        print("  Start packet processing and collecting threads")
+        print("Start packet processing and collecting threads")
 
     # Start the comsumer and producer threads.  Common consumer,
     #  but different methods for consumer for MQTT & HTTP
     c = threading.Thread(target = process_msg, args=())
-    if source=="MQTT":
-        p = threading.Thread(target = subscribe, args=(mqtt,))
+    if source==MQTT:
+        p = threading.Thread(target = mqtt_subscribe, args=(mqtt,))
     else:
-        if source=="HTTP":
-            p = threading.Thread(target = producer, args=())
+        if source==HTTP:
+            p = threading.Thread(target = http_subscribe, args=())
         else:
             print("?No protocol specified for connecting to data source.  Specify with '-S'")
             sys.exit(1)
@@ -1133,17 +1105,16 @@ if __name__ == "__main__":
     p.start()
     # Start the tkinter main loop and let MQTT events populate the display
 
-    win.mainloop()
-
-    # Subscribe returns immediately but 'on_message' continues
-    #   to respond to incoming 'msg' packets
-    p.join()
-    if debug:
-        print("'subscribe' collecting thread exited but 'on_message' continues")
-
     # Start window; will be terminated by 'quit_prog'
     if debug:
         print("Start window processing thread")
+    win.mainloop()
+
+    p.join()
+    # MQTT Subscribe returns immediately but 'on_message' continues
+    #   to respond to incoming 'msg' packets
+    if debug:
+        print("Collecting thread exited but processing thread continues")
 
     c.join()
     # Consumer thread, 'process_msg' has stopped: exit

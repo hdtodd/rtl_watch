@@ -349,6 +349,7 @@ def make_parser():
 def set_params():
     global source, host, topic, username, password, port, debug, debugW
     global dup_thresh, tbl_width, grp_cnt
+    global noTPMS
     global omitSNR, omitITGT, omitFreq, omitPPT
     
     args = make_parser()
@@ -708,6 +709,7 @@ def connect_mqtt() -> mqtt_client:
 # Process messages that are put into the queue by 'on_message'
 def process_msg():
     global source
+    global noTPMS
     global exit_event
     global msg_q
     global first_rec, last_rec

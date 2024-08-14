@@ -549,6 +549,8 @@ def quit_prog():
         print("Quitting from quit_prog")
     exit_event.set()
     msg_q.put(None)
+    if source=="HTTP":
+        print(CSIGRN, "\n\nWait for data collection to complete ...", CSIBLK)
     win.destroy()
     if source=="MQTT":
         mqtt.loop_stop()
@@ -715,7 +717,7 @@ def process_msg():
     while not exit_event.is_set():
         msg = msg_q.get()
 
-        # and process it
+        # If it's a null message, that's our signal to quit
         if msg == None:
             if source=="MQTT":
                 mqtt.loop_stop()
@@ -723,20 +725,32 @@ def process_msg():
                 print("Stop processing thread in 'process_msg'")
             break
         else:
-            # Parse the json payload and process
-            # When we get a record, ignore if it's a duplicate,
-            #   update display if it isn't
-            if source=="MQTT":
-                y = json.loads(msg.payload.decode())
-            else:
-                y = json.loads(codecs.decode(msg,"utf-8"))
+            # It's a real message, so process it if we can parse it
+            # First, try to parse the json payload
+            try:
+                if source=="MQTT":
+                    y = json.loads(msg.payload.decode())
+                else:
+                    y = json.loads(codecs.decode(msg,"utf-8"))
+            except:
+                # Nope, can't serialize the packet
+                print("Unable to load JSON fields from record:\n\t", end="")
+                if source=="MQTT":
+                    print(msg.payload.decode())
+                else:
+                    print(codecs.decode(msg,"utf-8"))
+                continue
+                    
             # Is this a record type that we want to process?
+            # If we can't recognize the device, forget it
             if "model" not in y:
                 continue
-            # count this new record
-            totrecs += 1
+            # If it's a TPMS and we're ignoring those, forget it 
             if noTPMS and "type" in y and y["type"]=="TPMS":
                 continue
+
+            # OK, we want to process it.  So count it and record it.
+            totrecs += 1
 
             #  Create the device identifier as "model/channel/id"
             dev = y["model"] + "/"

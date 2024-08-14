@@ -21,8 +21,9 @@ The display window is divided into several sections:
 ### The Upper Information Section
 This section provides general information about the monitoring process.  It indicates:
 
-1. the network protocol (HTTP or MQTT) used for the connection
+1. the network protocol (HTTP or MQTT) used for the connection;
 1. the `rtl_433` host that it is monitoring;
+2. the `rtl_433` port that it is connected through;
 1. the total number of packets received (many of which are duplicates since devices may send multiple packets for a single observation);
 1. the total number of tranmissions received (de-duplicated packets);
 1. the date and time of the earliest and latest transmission observed.

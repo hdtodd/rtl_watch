@@ -1,0 +1,303 @@
+#!/usr/bin/env python3
+# http_rtl
+VERSION="1.0"
+
+"""
+  Custom data handling example for rtl_433's HTTP (line) streaming API of JSON events.
+  Modeled after:
+     https://github.com/merbanan/rtl_433/blob/master/examples/rtl_433_http_stream.py
+
+  Start rtl_433 (`rtl_433 -F http`), then this script.
+  Needs the Requests package to be installed.
+"""
+
+AP_DESCRIPTION="""                                                                        
+http_rtl:  Display data published via http-streaming from an rtl_433 server 
+             using message queing between threads to buffer processing logjams
+"""
+
+AP_EPILOG="""                                                                                                                                                                     
+"""
+
+import argparse
+import requests
+import json
+#from time import sleep
+import sys
+import os
+import signal
+from queue import Queue
+import threading
+from datetime import datetime
+
+#  You can run rtl_433 and this script on different machines,
+#  Start rtl_433 with `-F http:0.0.0.0`, for example, or
+#    edit the rtl_433.conf file to include
+#      "output http:<ip address>" or just "output http"
+#  Then, in this program, either provide the host name on the
+#    command line (-H <host>), supply the host name in the
+#    environment (as in HTTP_HOST = <hostname or ip>, or set
+#    the remote hostname in the code below as in
+#    `HTTP_HOST = "192.168.1.100"` (use your server ip)
+
+global  msg_q
+global  exit_event
+global  debug
+global  useF
+
+host  = None
+port  = 8433
+debug = False
+
+CSIBLK = "\033[30m"
+CSIRED = "\033[31m"
+CSIYLW = "\033[93m"
+CSIMGN = "\033[95m"
+CSIBLU = "\033[34m"
+CSIGRN = "\033[32m"
+
+# Function to convert an ISO or Unix Epoch timestamp into both
+# Accepts time in either format, returns (<ISO Time>, <Epoch Time>)
+def CnvTime(ts):
+    # Does it look like an ISO time stamp
+    if ts.find("-") > 0:
+        # Yes, so try that; if it fails, error out
+        try:
+            eTime   = datetime.fromisoformat(ts).timestamp()
+            isoTime = ts
+        except ValueError as e:
+            err={}
+            print("datetime error in input line converting time string: ", ts)
+            print("datetime  msg:", err.get("error", str(e)))
+            sys.exit(1)
+    else:
+        # Not ISO, so let's try Epoch format (float)
+        try:
+            eTime   = float(ts)
+            isoTime = datetime.fromtimestamp(eTime)
+        except ValueError as e:
+            err = {}
+            print("Datetime conversion failed on line with datetime string", ts)
+            print("float() error msg:", err.get("error", str(e)))
+            sys.exit(1)
+
+    return(isoTime,eTime)
+# End CnvTime()
+
+# Keyboard interrupt routine to set exit_event flag & signal consumer thread
+def quit_prog(signum, stack_frame):
+    global exit_event
+    global debug
+    print(CSIGRN, "\n\nWait for data collection to complete ...", CSIBLK)
+    if debug:
+        print("'exit_event' set in 'quit_prog'")
+    exit_event.set()
+    msg_q.put(None)
+
+    
+#############################################################################
+#  Command-line parsing and parameter-setting functions
+
+#  Create the parser
+def make_parser():
+    global host, port, debug
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=AP_DESCRIPTION, epilog=AP_EPILOG)
+    parser.add_argument("-H", "--host", dest="host", type=str, default=host,
+                        help="HTTP streaming hostname to connect to (default: %(default)s)")
+    parser.add_argument("-P", "--port", type=int, default=port,
+                        help="HTTP port (default: %(default)s)")
+    parser.add_argument("-d", "--debug", dest="debug", action="store_true")
+    parser.add_argument("-v", "--version", action="version", version=VERSION)
+    specifyTemp = parser.add_mutually_exclusive_group()
+    specifyTemp.add_argument("-C", "--Celsius", dest="degC",
+                             action="store_true", default=False,
+                             help="Display temperatures in Celsius (default is Fahrenheit)")
+    specifyTemp.add_argument("-F", "--Fahrenheit", dest="degC", action="store_false",
+                             default=True,
+                             help="Display temperatures in Fahrenheit (default)")    
+    args = parser.parse_args()
+    return args
+
+#  Set parameters
+def set_params():
+    global host, port, debug, useF
+    args = make_parser()
+
+    #  We need host name,  so if not already provided by
+    #    cmdline, env, or embedded source code, then ask for them                         
+    if not args.host:
+        if "HTTP_HOST" in os.environ:
+            args.host = os.environ["HTTP_HOST"]
+        else:
+            if host is None:
+                args.host = input("HTTP streaming host name or IP: ")
+
+    if not args.port and 'HTTP_PORT' in os.environ:
+        args.port = os.environ['HTTP_PORT']
+
+    host  = args.host
+    port  = args.port
+    debug = args.debug
+    useF  = False if args.degC is not None and args.degC else True
+    if debug:
+        print("Debug is ON")
+        print("\tHTTP host:    ", host)
+        print("\tHTTP port:    ", port)
+        print("\tTemp in ", "˚F" if useF else "˚C")
+    return
+#  End command-line and parameter-setting functions
+
+
+#############################################################################
+#  Message consumer thread
+
+#  This function just processes the JSON data and returns
+#    In this case, just print out some of the details
+def process(data):
+    global useF
+    
+    (isoTime,eTime) = CnvTime(data["time"])
+    label = isoTime + "\t" + str(eTime) + "\t"
+    # Only process if we can create a model label
+    if "model" in data:
+        label += data["model"]+"/"
+    else:
+        return
+    if "channel" in data:
+        label += str(data["channel"])
+    label += "/"
+    if "id" in data:
+        label += str(data["id"])
+
+    if "temperature_C" in data:
+        t = float(data["temperature_C"])
+        if useF:
+            label += '\tTemp=' + str( round(9/5*t+32.0,1) ) + "˚F"
+        else:
+            label += '\tTemp=' + str( round(t,1) ) + "˚C"
+    if "humidity" in data:
+        label += '\tRH=' + str(data["humidity"]) + "%"
+
+    if "battery_ok" in data:
+        if data["battery_ok"] == 0:
+            label += '\tBattery low!'
+
+    print(label)
+
+    return
+
+def consumer():
+    global msg_q
+    global exit_event
+    global debug
+    
+    #  As long as 'exit_event' hasn't been set and
+    #    'producer' hasn't sent a 'None' message, loop and process msgs
+    while not exit_event.is_set():
+        line = msg_q.get()
+        if line == None:
+            if debug:
+                print("Got null msg in consumer; break from loop")
+            break
+        try:
+            # Decode the message as JSON
+            data = json.loads(line)
+            if debug:
+                print(CSIRED,data,CSIBLK)
+            process(data)
+            
+        except KeyError:
+            # Ignore unknown message data and continue
+            if debug:
+                print(CSIRED,"Unable to recognize line: ", line, CSIBLK)
+            pass
+
+        except ValueError as e:
+            # Warn on decoding errors
+            print(CSIRED,f'Event format not recognized: {e}', CSIBLK)
+
+    #  We get here if 'exit_event' has been set; just return and exit thread
+    if debug:
+        print("Exiting 'consumer'")
+    return
+
+#############################################################################
+#  Message producer thread
+#  Listen for streamed http messages until 'exit_event' has been set,
+#    telling us to exit and close this thread.
+def producer():
+    global debug
+    global msq_queue
+    global exit_event
+    url = f'http://{host}:{port}/stream'
+    headers = {'Accept': 'application/json'}
+
+    # We receive JSON events, one per line terminated with CRLF.
+    # On Events and Stream endpoints a keep-alive of CRLF will be send every 60 seconds.
+    response = requests.get(url, headers=headers, timeout=70, stream=True)
+    print(CSIGRN, f'Connected to {url}', CSIBLK)
+    print(CSIBLU,"ISO Timestamp\t\tEpoch Time\tDevice ID\t\tTemperature\tHumid\tBattery low?", CSIBLK)
+
+    try:
+        # Open the HTTP (line) streaming API of JSON events
+        for line in response.iter_lines():
+            if debug:
+                print(line)
+            line = line.rstrip()
+            if not line:
+                # filter out keep-alive empty lines
+                continue
+            # We have a message.  Queue it for processing
+            msg_q.put(line)
+            if exit_event.is_set():
+                break
+
+    except requests.ConnectionError:
+        print('Connection failed, retrying...')
+        sleep(5)
+        response = requests.get(url, headers=headers, timeout=70, stream=True)
+        print(f'Connected to {url}')
+
+    #  We get here when 'exit_event' has been set externally
+    #  Tell the consumer to quit by sending a 'None' message and return
+    #    to caller, terminating this thread
+    msg_q.put(None)
+    print('\nHTTP message producer thread exiting.')
+    return
+
+#  The main script
+if __name__ == "__main__":
+    global msg_q
+    global exit_event
+#    global debug
+    
+    #  Set up our global variables and set to handle CNTL-C
+    msg_q = Queue()
+    exit_event = threading.Event()
+    signal.signal(signal.SIGINT, quit_prog)
+
+    #  Get the parameters needed for the connection
+    set_params()
+
+    #  Identify the producer and consumer threads
+    #    (Message collecting and message processing)
+    p = threading.Thread(target = producer, args=())
+    c = threading.Thread(target = consumer, args=())
+
+    #  Start the producer and consumer threads and let them
+    #    loop to produce (listen for and queue) and consume (process
+    #    from the queue) the messages
+    if debug:
+        print("Starting consumer and producer threads")
+    print(CSIGRN,"Monitoring rtl_433 HTTP stream", CSIBLK)
+    c.start()
+    p.start()
+
+    # We get here when the threads exit and terminate
+    #   Let the threads return to this control program and exit
+    c.join()
+    print("Consumer exited")
+    p.join()
+    print("Producer exited")

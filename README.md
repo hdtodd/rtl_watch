@@ -97,7 +97,7 @@ The following options may be provided on the command line to provide parameters 
 
 *  \[`-h` | `--help`\]  
    Describes the command-line options
-*  \[`-S` | `--source`\] `\[HTTP | MQTT\]`
+*  \[`-S` | `--source`\] [HTTP | MQTT]
    Connect to the `rtl_433` service via HTTP or MQTT protocol (default MQTT)
 *  \[`-H` | `--host`\] `<MQTT Broker host name (string)>`  
    Identify the MQTT broker on your local-area network that is publishing `rtl_433` packet infomation in JSON format

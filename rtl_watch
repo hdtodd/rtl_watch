@@ -45,6 +45,7 @@ VERSION="4.0.0"
 import argparse
 import sys
 import os
+import codecs
 import signal
 from   paho.mqtt import client as mqtt_client
 import random
@@ -713,8 +714,6 @@ def process_msg():
     global tbl
     while not exit_event.is_set():
         msg = msg_q.get()
-        # count this new record
-        totrecs += 1
 
         # and process it
         if msg == None:
@@ -727,13 +726,17 @@ def process_msg():
             # Parse the json payload and process
             # When we get a record, ignore if it's a duplicate,
             #   update display if it isn't
-            y = json.loads(msg.payload.decode())
-
+            if source=="MQTT":
+                y = json.loads(msg.payload.decode())
+            else:
+                y = json.loads(codecs.decode(msg,"utf-8"))
             # Is this a record type that we want to process?
             if "model" not in y:
-                return
+                continue
+            # count this new record
+            totrecs += 1
             if noTPMS and "type" in y and y["type"]=="TPMS":
-                return
+                continue
 
             #  Create the device identifier as "model/channel/id"
             dev = y["model"] + "/"

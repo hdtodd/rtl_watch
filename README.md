@@ -199,8 +199,8 @@ When using HTTP streaming as the connection protocol, there may be a delay betwe
 ## Related Tools
 These related `rtl_433` tools might also be helpful:
 
-* [`rtl_snr`](https://github.com/hdtodd/rtl_snr): Analyzes the JSON logs on the system that runs `rtl_433` to catalog the devices seen and analyze their SNR characteristics.  Equivalent to `rtl_watch` but for processing log files.
-* [DNT](https://github.com/hdtodd/DNT): Display temperatures from remote thermometers in your neighborhood.  Use the information from `rtl_snr` or `rtl_watch` about thermometers in your neighborhood and then monitor them with a real-time display.
+* [`rtl_433_stats`](https://github.com/hdtodd/rtl_433_stats): Analyzes the JSON logs from the system that runs `rtl_433` to catalog the devices seen and analyze their SNR characteristics.  Equivalent to `rtl_watch` but for processing log files.
+* [DNT](https://github.com/hdtodd/DNT): Display temperatures from remote thermometers in your neighborhood.  Use the information from `rtl_433_stats` or `rtl_watch` about thermometers in your neighborhood and then monitor them with a real-time display.
 
 ## Release History
 

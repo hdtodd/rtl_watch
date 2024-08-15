@@ -1,18 +1,21 @@
 #! /usr/bin/env python3
 #  rtl_watch
-VERSION="3.0.1"
+VERSION="4.0.0"
 
 #  Python program for real-time monitoring of ISM packets.
 #
-#  Monitors mqtt packets from a computer running rtl_433 to
+#  Monitors message packets from a computer running rtl_433 to
 #  collect data from and analyze characteristics of ISM-band
 #  remote-sensing device transmissions (433MHz in the US).
 #
+#  This version can connect to the monitoring system via
+#  MQTT or HTTP protocol.
+#
 #  rtl_433 on the monitoring computer analyzes radio packets
 #  and broadcasts the information in JSON format for
-#  recognized packets via mqtt broker host
+#  recognized packets via mqtt broker host or http streaming
 #
-#  rtl_watch subscribes to that published mqtt stream to
+#  rtl_watch subscribes to that published mqtt or http stream to
 #  record, count, and analyze signal strength and other date
 #  for packets received by that RTL_SDR dongle.  rtl_watch can
 #  run on the monitoring computer or any number of other computers
@@ -38,10 +41,13 @@ VERSION="3.0.1"
 #         improved window handling, improved parameter-setting
 #  V3.0.0 modifications 2024.07: use a queue and threads to
 #         catch and records all packets
+#  V4.0.0 Add support for HTTP streaming as the data source
+#
 
 import argparse
 import sys
 import os
+import codecs
 import signal
 from   paho.mqtt import client as mqtt_client
 import random
@@ -52,6 +58,7 @@ import math
 from   enum import IntEnum
 from   queue import Queue
 import threading
+import requests
 try:
     import tkinter as tk
     from   tkinter import ttk
@@ -65,7 +72,7 @@ except ImportError:
 
 AP_DESCRIPTION="""
 rtl_433_watch:  Real-time monitor for ISM-band device transmissions
-                as observed and published via MQTT by rtl_433.
+                as observed and published by rtl_433 via MQTT or HTTP
 """
 
 AP_EPILOG="""
@@ -78,14 +85,19 @@ AP_EPILOG="""
 # MQTT connection management
 # Parameters used to establish the mqtt connection to the rtl_433
 #   receiver mqtt publisher
+
 host      = None
+port      = None
 topic     = "rtl_433/+/events"
-port      = 1883
+Mport     = 1883
+Hport     = 8433 
 username  = ""
 password  = ""
 client_id = f'python-mqtt-{random.randint(0, 100)}'
 
 # Variables and constants used globally
+HTTP       = 0
+MQTT       = 1
 win        = None
 frm_table  = None
 grp_cnt    = 0
@@ -119,6 +131,7 @@ Warn       = IntEnum('Warn', [ ('OK', 0), ('ALERT', 1), ('ALARM', 2)])
 
 global exit_event
 global msg_q
+global source
 
 # Set 2-sec threshhold for rejecting duplicate records
 dup_thresh = 2.0
@@ -306,18 +319,19 @@ def make_parser():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description=AP_DESCRIPTION, epilog=AP_EPILOG)
 
-    parser.add_argument("-H", "--host", dest="host", type=str,
-                        default=host,
-                        help="MQTT hostname to connect to (default: %(default)s)")
-    parser.add_argument("-T", "--topic", dest="topic", type=str,
-                        default=topic,
+    parser.add_argument("-S", "--source", dest="source_str", type=str,
+                        choices=["HTTP", "MQTT"], default="MQTT",
+                        help="Connect to source with HTTP streaming or MQTT?")
+    parser.add_argument("-H", "--host", dest="host", type=str, default=host,
+                        help="HTTP or MQTT hostname to connect to (default: %(default)s)")
+    parser.add_argument("-p", "--port", type=int, 
+                        help="HTTP or MQTT port # (default: 8433 or 1883)")
+    parser.add_argument("-T", "--topic", dest="topic", type=str, default=topic,
                         help="rtl_433 MQTT event topic to subscribe to (default: %(default)s)")
     parser.add_argument("-U", "--username", type=str, default=username,
                         help="MQTT username, if needed; defaults to blank")
     parser.add_argument("-P", "--password", type=str, default=password,
                         help="MQTT password, if needed; defaults to blank")
-    parser.add_argument("-p", "--port", type=int, default=port,
-                        help="MQTT port (default: %(default)s)")
     parser.add_argument("-x", "--exclude_noise", type=int, dest="noise",
                         help="Exclude device records with fewer than 'NOISE' packets seen")
     parser.add_argument("-w", "--xmt_window", dest="window", type=float,
@@ -337,22 +351,53 @@ def make_parser():
 
 # Set execution parameters from defaults and the cmdline
 def set_params():
-    global host, topic, username, password, port, debug, debugW
+    global source, host, topic, username, password, port, debug, debugW
     global dup_thresh, tbl_width, grp_cnt
     global omitSNR, omitITGT, omitFreq, omitPPT, noTPMS
     
     args = make_parser()
 
+    #  We need to know if we're connecting to the source via HTTP or MQTT
+    #  Should be set to MQTT by parser by default, but check
+    if not args.source_str:
+        if source is None:
+            while True:
+                args.source_str = input("Connect to source via HTTP or MQTT?: ")
+                if args.source_str=="HTTP" or args.source_str=="MQTT":
+                    break
+    source = HTTP if args.source_str=="HTTP" else MQTT
+    
     #  We need host and topic, so if not already provided by
     #    cmdline, env, or embedded source code, then ask for them
     if not args.host:
-        if "MQTT_HOST" in os.environ:
+        if source==MQTT and "MQTT_HOST" in os.environ:
             args.host = os.environ["MQTT_HOST"]
         else:
-            if host is None:
-                args.host = input("MQTT host name or IP: ")
+            if source==HTTP and "HTTP_HOST" in os.environ:
+                args.host = os.environ["HTTP_HOST"]
+            else:
+                if host is None:
+                    args.host = input("HTTP/MQTT host name or IP: ")
 
-    if not args.topic:
+    #  Set connection parameters from env if possible
+    #  If source is not specified, default to MQTT for historic compatibility
+    if not args.port:
+        if source==MQTT:
+            if "MQTT_PORT" in os.environ:
+                args.port = os.environ["MQTT_PORT"]
+            else:
+                args.port = Mport
+        else:
+            if source==HTTP:
+                if "HTTP_PORT" in os.environ:
+                    args.port = os.environ["HTTP_PORT"]
+                else:
+                    args.port = Hport
+            else:
+                args.port=Mport
+                source = MQTT
+    
+    if source==MQTT and not args.topic:
         if "MQTT_TOPIC" in os.environ:
             args.topic = os.environ["MQTT_TOPIC"]
         else:
@@ -361,18 +406,15 @@ def set_params():
 
     #  username and password may not be required, so don't prompt
     #    if not already provided; and port just defaults in parser
-    if not args.username and 'MQTT_USERNAME' in os.environ:
-        args.username = os.environ['MQTT_USERNAME']
+    if not args.username and "MQTT_USERNAME" in os.environ:
+        args.username = os.environ["MQTT_USERNAME"]
     else:
         args.username = ""
 
-    if not args.password and 'MQTT_PASSWORD' in os.environ:
-        args.password = os.environ['MQTT_PASSWORD']
+    if not args.password and "MQTT_PASSWORD" in os.environ:
+        args.password = os.environ["MQTT_PASSWORD"]
     else:
         args.password = ""
-
-    if not args.port and 'MQTT_PORT' in os.environ:
-        args.port = os.environ['MQTT_PORT']
 
     host     = args.host
     topic    = args.topic
@@ -397,15 +439,16 @@ def set_params():
     if debug:
         print("Debug is ON")
         print("Parameter settings in execution are ...")
-        print("\tMQTT host:    ", host)
+        print("\tConnect to data source via ", "HTTP" if source==HTTP else "MQTT")
+        print("\tHTTP/MQTT host:    ", host)
+        print("\tHTTP/MQTT port:    ", port)
         print("\tMQTT topic:   ", topic)
         print("\tMQTT username:", username)
         print("\tMQTT password:", password)
-        print("\tMQTT port:    ", port)
         print("\tDebug warnings", debugW)
         print("\tIncluding" if not omitSNR  else "\tExcluding", "SNR Stats")
-        print("\tIncluding" if not omitITGT else "\tExcluding", "ITGT Stats")
         print("\tIncluding" if not omitFreq else "\tExcluding", "Freq Stats")
+        print("\tIncluding" if not omitITGT else "\tExcluding", "ITGT Stats")
         print("\tExcluding" if     noTPMS   else "\tIncluding", "TPMS devices")
         print("\tUsing transmission window of", dup_thresh)
         print("\tDisplay table width will be", tbl_width, "columns")
@@ -510,13 +553,18 @@ def quit_prog():
     global msg_q
     global mqtt
     global win
+    global source
     if debug:
         print("Quitting from quit_prog")
     exit_event.set()
     msg_q.put(None)
+    if source==HTTP:
+        print(CSIGRN, "\n\nWait for data collection to complete ...", CSIBLK)
     win.destroy()
-    mqtt.loop_stop()
-    mqtt.disconnect()
+    if source==MQTT:
+        mqtt.loop_stop()
+        mqtt.disconnect()
+    return
 
 # Print a summary table by appending to file "rtl-watch.prn"    
 def print_summary():
@@ -667,35 +715,52 @@ def connect_mqtt() -> mqtt_client:
     return mqtt #from connect_mqtt()
 
 # Process messages that are put into the queue by 'on_message'
-def process_msg(mqtt):
+def process_msg():
+    global source
+    global noTPMS
     global exit_event
     global msg_q
     global first_rec, last_rec
     global devices
     global dedups, totrecs
     global tbl
-    while True:
+    while not exit_event.is_set():
         msg = msg_q.get()
-        # count this new record
-        totrecs += 1
 
-        # and process it
+        # If it's a null message, that's our signal to quit
         if msg == None:
-            mqtt.loop_stop()
+            if source==MQTT:
+                mqtt.loop_stop()
             if debug:
-                print("Stop mqtt loop in 'process_msg'")
+                print("Stop processing thread in 'process_msg'")
             break
         else:
-            # Parse the json payload and process
-            # When we get a record, ignore if it's a duplicate,
-            #   update display if it isn't
-            y = json.loads(msg.payload.decode())
-
+            # It's a real message, so process it if we can parse it
+            # First, try to parse the json payload
+            try:
+                if source==MQTT:
+                    y = json.loads(msg.payload.decode())
+                else:
+                    y = json.loads(codecs.decode(msg,"utf-8"))
+            except:
+                # Nope, can't serialize the packet
+                print("Unable to load JSON fields from record:\n\t", end="")
+                if source==MQTT:
+                    print(msg.payload.decode())
+                else:
+                    print(codecs.decode(msg,"utf-8"))
+                continue
+                    
             # Is this a record type that we want to process?
+            # If we can't recognize the device, forget it
             if "model" not in y:
-                return
+                continue
+            # If it's a TPMS and we're ignoring those, forget it 
             if noTPMS and "type" in y and y["type"]=="TPMS":
-                return
+                continue
+
+            # OK, we want to process it.  So count it and record it.
+            totrecs += 1
 
             #  Create the device identifier as "model/channel/id"
             dev = y["model"] + "/"
@@ -744,12 +809,13 @@ def process_msg(mqtt):
             write_display_row_for_device(dev)
             pkt_cnt.set(totrecs)
             xmt_cnt.set(dedups)
-            # No return; thread exits when loop_stop() is invoked
+            # No return; thread exits when exit_event is set
+            #   or when a 'None' message is received from data collector
 
 # Subscribe to rtl_433 publication & forward records we receive
 #   through the queue to the processing thread.  Keep
 #   message receipt process as brief as possible
-def subscribe(mqtt: mqtt_client):
+def mqtt_subscribe(mqtt: mqtt_client):
     def on_message(mqtt, userdata, msg):
         global msg_q
         global totrecs
@@ -763,8 +829,53 @@ def subscribe(mqtt: mqtt_client):
     if debug:
         print("Subscribed to mqtt feed")
     mqtt.loop_start()
-    return #From subscribe(), but 'on_message' is active as mqtt callback
+    return #From mqtt_subscribe(), but 'on_message' is active as mqtt callback
 # End MQTT functions and display updating
+
+
+#######################################################################################
+#  HTTP functions
+#  Message producer thread for http stream
+#  Listen for streamed http messages until 'exit_event' has been set,
+#    telling us to exit and close this thread.
+def http_subscribe():
+    global debug
+    global msq_queue
+    global exit_event
+    url = f'http://{host}:{port}/stream'
+    headers = {'Accept': 'application/json'}
+
+    # We receive JSON events, one per line terminated with CRLF.
+    # On Events and Stream endpoints a keep-alive of CRLF will be send every 60 seconds.
+    response = requests.get(url, headers=headers, timeout=70, stream=True)
+    print(f'Connected to {url}')
+
+    try:
+        # Open the HTTP (line) streaming API of JSON events
+        for line in response.iter_lines():
+            if debug:
+                print(line)
+            line = line.rstrip()
+            if not line:
+                # filter out keep-alive empty lines
+                continue
+            #  We have a message.  Queue the message for processing
+            msg_q.put(line)
+            if exit_event.is_set():
+                break
+
+    except requests.ConnectionError:
+        print('Connection failed, retrying...')
+        sleep(5)
+        response = requests.get(url, headers=headers, timeout=70, stream=True)
+        print(f'Connected to {url}')
+
+    #  We get here when 'exit_event' has been set externally
+    #  Tell the consumer to quit by sending a 'None' message and return
+    #    to caller, terminating this thread
+    msg_q.put(None)
+    print('\nHTTP message collector exiting.')
+    return
 
 #######################################################################################
 # Table management and display functions
@@ -882,7 +993,10 @@ def create_display():
     pkt_cnt.set(totrecs)
     xmt_cnt = tk.StringVar()
     xmt_cnt.set(dedups)
-    lbl_monitor = tk.Label(frm_info, text="Monitoring host: %s and topic: %s" % (host, topic), font=dfont)
+    if source==MQTT:
+        lbl_monitor = tk.Label(frm_info, text="Connected via MQTT to  host: %s, port %s, and topic: %s" % (host, port, topic), font=dfont)
+    else:
+        lbl_monitor = tk.Label(frm_info, text="Connected via HTTP to  host: %s and port: %s" % (host, port), font=dfont)
     lbl_monitor.pack(side="top", padx=5, pady=5)
     lbl_pkt = tk.Label(frm_info, text="Total pkts received:", font=dfont)
     lbl_pkt.pack(side="left", padx=5, pady=5)
@@ -939,6 +1053,9 @@ if __name__ == "__main__":
 
     global msg
     global userdata
+    global exit_event
+    global source
+
     userdata = None
     exit_event = threading.Event()
     msg_q = Queue(0)
@@ -964,29 +1081,41 @@ if __name__ == "__main__":
     # Connect to the mqtt host and subscribe to the feed.
     # This activates the on_message procedure in which
     #   MQTT events cause the displayed values to be updated
-    mqtt = connect_mqtt()
+    if source==MQTT:
+        mqtt = connect_mqtt()
 
     if debug:
         print("Entering main run loops")
-        print("  Start packet processing and collecting threads")
-    t1 = threading.Thread(target = process_msg, args=(mqtt,))
-    t2 = threading.Thread(target = subscribe, args=(mqtt,))
-    t1.start()
-    t2.start()
-    # Start the tkinter main loop and let MQTT events populate the display
+        print("Start packet processing and collecting threads")
 
-    # Subscribe returns immediately but 'on_message' continues
-    #   to respond to incoming 'msg' packets
-    t2.join()
-    if debug:
-        print("'subscribe' collecting thread exited but 'on_message' continues")
+    # Start the comsumer and producer threads.  Common consumer,
+    #  but different methods for consumer for MQTT & HTTP
+    c = threading.Thread(target = process_msg, args=())
+    if source==MQTT:
+        p = threading.Thread(target = mqtt_subscribe, args=(mqtt,))
+    else:
+        if source==HTTP:
+            p = threading.Thread(target = http_subscribe, args=())
+        else:
+            print("?No protocol specified for connecting to data source.  Specify with '-S'")
+            sys.exit(1)
+            
+    c.start()
+    p.start()
+    # Start the tkinter main loop and let MQTT events populate the display
 
     # Start window; will be terminated by 'quit_prog'
     if debug:
         print("Start window processing thread")
     win.mainloop()
 
-    t1.join()
+    p.join()
+    # MQTT Subscribe returns immediately but 'on_message' continues
+    #   to respond to incoming 'msg' packets
+    if debug:
+        print("Collecting thread exited but processing thread continues")
+
+    c.join()
     # Consumer thread, 'process_msg' has stopped: exit
     if debug:
         print("'process_msg' thread terminated; exiting normally")

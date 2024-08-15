@@ -1,4 +1,4 @@
-# rtl\_watch: Real-time rtl\_433 monitor v3.0.1
+# rtl\_watch: Real-time rtl\_433 monitor v4.0.0
 ## Catalog and characterize ISM devices using rtl\_433
 
 `rtl_watch` monitors output from `rtl_433` to display, in real time, the characteristics of the ISM-band devices broadcasting in your neighborhood.
@@ -8,7 +8,7 @@
 
 ## Use
 
-If your system already has the required components, the command `./rtl_watch` is all that's needed to begin monitoring.  `./rtl_watch` starts the program and  prompts for the name of the `rtl_433` host on your local area network that provides MQTT subscription service.  `./rtl_watch -H <hostname>` starts the program without the prompt.
+If your system already has the required components, the command `./rtl_watch` is all that's needed to begin monitoring.  `./rtl_watch` starts the program, prompts for the name of the `rtl_433` host on your local area network, and connects to that host via MQTT protocol (the default).   `./rtl_watch -H <hostname>` starts the program without the prompt and connects to the `rtl_433` service via MQTT.  To connect via HTTP to that service, use `./rtl_watch -S HTTP -H <hostname>`.
 
 The program opens a scrollable, resizable display window with a table with columns that characterize the signals from the devices observed by your `rtl_433` system; it appends to the table new remote devices and associated data as they are observed by the `rtl_433` host system; and it updates subsequent readings as they are reported.
 
@@ -21,7 +21,9 @@ The display window is divided into several sections:
 ### The Upper Information Section
 This section provides general information about the monitoring process.  It indicates:
 
+1. the network protocol (HTTP or MQTT) used for the connection;
 1. the `rtl_433` host that it is monitoring;
+2. the `rtl_433` port that it is connected through;
 1. the total number of packets received (many of which are duplicates since devices may send multiple packets for a single observation);
 1. the total number of tranmissions received (de-duplicated packets);
 1. the date and time of the earliest and latest transmission observed.
@@ -39,7 +41,7 @@ This section is the table of characteristics of the signals observed from each d
 1. the mean and standard deviation of the number of packets per transmission (PPT) from each device.
 
 >[!NOTE]
->ITGT and PPT statistics *lag one transmission behind readings*, since the past transmission isn't recognized until a new one begins.
+>ITGT and PPT statistics *lag one transmission behind readings*, since the end of the past transmission isn't recognized until a new one begins.
 
 ### The Control Buttons
 This section is located just below the title bar and provides the following controls for program operation:
@@ -82,9 +84,12 @@ To install, connect to an appropriate directory for downloading code and issue t
    `git clone http://github.com/hdtodd/rtl_watch`
 then `cd rtl_watch` and `./rtl_watch` to run the program.  See below for command-line options.
 
-Paho-MQTT v2 broke v1 callback invocations, but v3 of `rtl_watch` incorporates a workaround so that it will operate with either v1.x or v2.x of Paho-MQTT.  However, invocation on a system running v2.x will generate a warning, since `rtl_watch` continues to use the deprecated v1-style callback invocation for now.  `check_paho_vers` is included in this distribution: executing it will tell you which version you're running.
+>[!NOTE]
+>Paho-MQTT v2 broke v1 callback invocations, but v3 and subsequent versions of `rtl_watch` incorporate a workaround so that it will operate with either v1.x or v2.x of Paho-MQTT.  However, invocation on a system running v2.x will generate a warning, since `rtl_watch` continues to use the deprecated v1-style callback invocation for now.  `check_paho_vers` is included in this distribution: executing it will tell you which version you're running.
 
-`rtl_watch` requires that a computer (the "monitoring computer") on your local-area network be running `rtl_433` and re-broadcasting the ISM packets it recognizes as JSON messages via the `mqtt` protocol on the local-area network.  See instructions below if you do not have an `rtl_433` system set up or if it has not been set up to re-broadcast packets through the `mqtt` broker.
+`rtl_watch` requires that a computer (the "monitoring computer") on your local-area network be running `rtl_433` and re-broadcasting the ISM packets it recognizes as JSON messages via either the HTTP or MQTT protocol on the local-area network.  See instructions below if you do not have an `rtl_433` system set up or if it has not been set up to re-broadcast packets via MQTT or HTTP.
+
+If you plan to use HTTP as your connection protocol, you can verify that your `rtl_433` server is set up to stream via HTTP by running the program `http_rtl` that is included in this distribution.  It simply monitors the server HTTP stream and prints to the console a summary of the records that have been streamed (no interactive window).
 
 ## Using `rtl_watch`
 
@@ -94,6 +99,8 @@ The following options may be provided on the command line to provide parameters 
 
 *  \[`-h` | `--help`\]  
    Describes the command-line options
+*  \[`-S` | `--source`\] `[HTTP | MQTT]`  
+   Connect to the `rtl_433` service via HTTP or MQTT protocol (default MQTT)
 *  \[`-H` | `--host`\] `<MQTT Broker host name (string)>`  
    Identify the MQTT broker on your local-area network that is publishing `rtl_433` packet infomation in JSON format
 *  \[`-T` | `--topic`\] `<MQTT Broker rtl_433 topic (string)>`  
@@ -102,8 +109,8 @@ The following options may be provided on the command line to provide parameters 
    *Only needed if broker is secured*:  Username needed to access the MQTT broker
 *  \[`-P` | `--password`\] `<MQTT Broker rtl_433 password>`  
    *Only needed if broker is secured*: Password  needed to access the MQTT broker
-*  \[`-p` | `--port`\] `<MQTT Broker rtl_433 port (integer)>`  
-   *Only needed if modified from default 1883*:  Port the MQTT broker is using to broadcast rtl_433 messages 
+*  \[`-p` | `--port`\] `<`rtl_433` service MQTT publishing port or HTTP stream port (integer)>`  
+   *Only needed if modified on the server from the default 1883 for MQTT or 8433 for HTTP)*:  Specifies the port the rtl_433 service is using to broadcast rtl_433 messages 
 *  \[`-x` | `--exclude_noise`\] `<noise threshhold (integer)>`  
    Don't display devices with fewer than \<threshhold\> packets seen
 *  \[`-w` | `--xmit_window`\] `<max transmission time (float, in sec)>`  
@@ -119,11 +126,18 @@ The following options may be provided on the command line to provide parameters 
 *  \[`-v` | `--version`\]  
    Displays the version of rtl_watch.
 
-### Providing MQTT Parameters
+### Providing the `rtl_433` server hostname
 
-`rtl_watch` requires information about the `rtl_433` MQTT publishing host:
+`rtl_watch` requires the identity of the `rtl_433` server to which it should connect for MQTT subscription or HTTP streaming.  You can specify that hostname (or IP address) by setting an environment variable or by specifying it on the command line with the `-H` option.  If not provided on the command line or environment, `rtl_watch` prompts for the hostname and assumes the default port 8433 for HTTP or 1883 for MQTT.
 
-*  MQTT host name
+For HTTP service, only the hostname and `-S HTTP` are needed to start operation (unless the streaming port is not 8433).
+
+The HTTP hostname and port may also be specified by environment variables `HTTP_HOST` and `HTTP_PORT`.  The environment values are overridden by command-line values if they're provided.
+
+### Providing MQTT Parameters (if using MQTT protocol)
+
+If you're using MQTT protocol, `rtl_watch` requires additional information about the `rtl_433` MQTT publishing host:
+
 *  MQTT topic (default "rtl\_433/+/events")
 *  MQTT login username [if MQTT is secured] 
 *  MQTT login password [if MQTT is secured] 
@@ -159,7 +173,9 @@ Perform these steps on the computer you intend to use to monitor the ISM-band ra
    * Edit `/usr/local/etc/rtl_433/rtl_433.conf`:
      * If your regional ISM band is not 433.92MHz, set the correct frequency in the "frequency" entry.
      * Under **Analyze/Debug options**, comment out stats reporting: `#report_meta stats`
-     * Under **Data output options** as command line option: add `output mqtt` and `output json:/var/log/rtl_433/rtl_433.json`.  The former has the program publish received packets via MQTT and the latter logs received packets to a log file in case you want to do subsequent analysis of devices in your neighborhood.  More options for MQTT publishing service are available, but this will get you started.
+     * If you plan to use HTTP as your streaming option, under **Data output options**, add `output http`.
+     * If you plan to use MQTT as your publishing option, under **Data output options**, add `output mqtt`.
+     * Under **Data output options**, add `output json:/var/log/rtl_433/rtl_433.json` to tell `rtl_433` to log received packets to a log file in case you want to do subsequent analysis of devices in your neighborhood.  More options for HTTP streaming and MQTT publishing service are available, but this will get you started.
      *Create the directory for that log file: `sudo mkdir /var/log/rtl_433`
 1. **PRODUCTION TEST** Now `sudo /usr/local/bin/rtl_433` from the command line of one terminal screen on the monitoring computer.  From the command line of another terminal screen on that computer, or from another computer with mosquitto client installed, type `mosquitto_sub -h <monitorhost> -t "rtl_433/<monitorhost>/events"`, where you substitute your monitoring computer's hostname for "\<monitorhost\>".  If you have ISM-band traffic in your neighborhood, and if you've tuned `rtl_433` to the correct frequency, you should be seeing the JSON-format records of packets received by the RTL\_SDR dongle.  If you don't, first verify that you can publish to `mosquitto` on that monitoring computer and receive via a client (use the native `mosquitto_pub` and `mosquitto_sub` commands).  If `mosquitto` is functioning correctly, check that the rtl\_433 configuration file specifies mqtt output correctly.
 1. Finally, install the rtl_433 monitor as a service:
@@ -175,14 +191,16 @@ The developers of `rtl_433` continually update the list of devices that the prog
 
 The current version of Python Paho-MQTT is v2 on MacOS Sonoma with Python v3.12.4, and it is v1.6 on RaspiOS 6.6 Bookworm with Python v3.11.2 as installed with apt-get/pip3.  Paho-MQTT v2 broke the callback invocation for v1.  `rtl_watch` has a workaround (invokes v1 compatibility on a v2 system), but v2 issues a deprecation warning.  `rtl_watch` will be updated to use v2 invocation when the RaspiOS Paho-MQTT library has been updated to v2.
 
+When using HTTP streaming as the connection protocol, there may be a delay between pressing the Quit button and actual termination of the program as threads terminate themselves.
+
 >[!NOTE]
 >`rtl_watch` uses message queuing between process threads to buffer message processing and window updating from packet collection.  It has not been tested on  a single-core system in a high-traffic location and may not be able to respond well in that environment.  If you notice problems, please report them to the author with details about the system on which you're running `rtl_watch`.
 
 ## Related Tools
 These related `rtl_433` tools might also be helpful:
 
-* [`rtl_snr`](https://github.com/hdtodd/rtl_snr): Analyzes the JSON logs on the system that runs `rtl_433` to catalog the devices seen and analyze their SNR characteristics.  Equivalent to `rtl_watch` but for processing log files.
-* [DNT](https://github.com/hdtodd/DNT): Display temperatures from remote thermometers in your neighborhood.  Use the information from `rtl_snr` or `rtl_watch` about thermometers in your neighborhood and then monitor them with a real-time display.
+* [`rtl_433_stats`](https://github.com/hdtodd/rtl_433_stats): Analyzes the JSON logs from the system that runs `rtl_433` to catalog the devices seen and analyze their signal characteristics.  Equivalent to `rtl_watch` but for processing log files.
+* [DNT](https://github.com/hdtodd/DNT): Display temperatures from remote thermometers in your neighborhood.  Use the information from `rtl_433_stats` or `rtl_watch` about thermometers in your neighborhood and then monitor them with a real-time display.
 
 ## Release History
 
@@ -190,8 +208,10 @@ These related `rtl_433` tools might also be helpful:
 *  V2.0: Extend table contents; revise parameter-entry options
 *  V2.1: Add workaround for paho_mqtt v1/v2 callback incompatibility; finish docs.
 *  V3.0: Add queuing and threads to separate packet collection from processing; correct error in window updating for duplicate packets
+*  V4.0: Add HTTP streaming as an alternative data source instead of MQTT; correct error in handling noTPMS option; add additional filters to ignore packets that can't be cataloged. 
 
 ## Author
 
-David Todd, hdtodd@gmail.com, v1: 2023.03; v2.0: 2023.05; v2.1 2024.07; v3.0 2024.08
+David Todd, hdtodd@gmail.com, v1: 2023.03; v2.0: 2023.05; v2.1 2024.07; v3.0 2024.08; v4.0 2024.08
+
 

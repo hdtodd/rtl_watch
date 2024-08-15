@@ -8,7 +8,7 @@
 
 ## Use
 
-If your system already has the required components, the command `./rtl_watch` is all that's needed to begin monitoring.  `./rtl_watch` starts the program and  prompts for the name of the `rtl_433` host on your local area network that provides either MQTT or HTTP subscription service.  `./rtl_watch -H <hostname>` starts the program without the prompt and connects to the `rtl_433` service via MQTT.  To connect via HTTP to that service, add `-S HTTP` to the command line.
+If your system already has the required components, the command `./rtl_watch` is all that's needed to begin monitoring.  `./rtl_watch` starts the program, prompts for the name of the `rtl_433` host on your local area network, and connects to that host via MQTT protocol (the default).   `./rtl_watch -H <hostname>` starts the program without the prompt and connects to the `rtl_433` service via MQTT.  To connect via HTTP to that service, use `./rtl_watch -S HTTP -H <hostname>`.
 
 The program opens a scrollable, resizable display window with a table with columns that characterize the signals from the devices observed by your `rtl_433` system; it appends to the table new remote devices and associated data as they are observed by the `rtl_433` host system; and it updates subsequent readings as they are reported.
 
@@ -126,9 +126,9 @@ The following options may be provided on the command line to provide parameters 
 
 ### Providing the `rtl_433` server hostname
 
-`rtl_watch` requires the identity of the `rtl_433` server to which it should connect for MQTT subscription or HTTP streaming.  You can specifiy that hostname (or IP address) on the command line with the `-H` option.  If not provided on the command line or environment, `rtl_watch` prompts for the hostname and assumes the default port 8433.
+`rtl_watch` requires the identity of the `rtl_433` server to which it should connect for MQTT subscription or HTTP streaming.  You can specifiy that hostname (or IP address) by setting an environment variable or by specifying it on the command line with the `-H` option.  If not provided on the command line or environment, `rtl_watch` prompts for the hostname and assumes the default port 8433 for HTTP or 1883 for MQTT.
 
-For HTTP service, only the hostname is needed to start operation (unless the streaming port is not 8433).
+For HTTP service, only the hostname and `-S HTTP` are needed to start operation (unless the streaming port is not 8433).
 
 The HTTP hostname and port may also be specified by environment variables `HTTP_HOST` and `HTTP_PORT`.  The environment values are overridden by command-line values if they're provided.
 

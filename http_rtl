@@ -145,7 +145,7 @@ def set_params():
         print("Debug is ON")
         print("\tHTTP host:    ", host)
         print("\tHTTP port:    ", port)
-        print("\tTemp in ", "˚F" if useF else "˚C")
+        print("\tTemp in ", "\xb0F" if useF else "\xb0C")
     return
 #  End command-line and parameter-setting functions
 
@@ -174,9 +174,9 @@ def process(data):
     if "temperature_C" in data:
         t = float(data["temperature_C"])
         if useF:
-            label += '\tTemp=' + str( round(9/5*t+32.0,1) ) + "˚F"
+            label += '\tTemp=' + str( round(9/5*t+32.0,1) ) + "\xb0F"
         else:
-            label += '\tTemp=' + str( round(t,1) ) + "˚C"
+            label += '\tTemp=' + str( round(t,1) ) + "\xb0C"
     if "humidity" in data:
         label += '\tRH=' + str(data["humidity"]) + "%"
 
@@ -271,7 +271,6 @@ def producer():
 if __name__ == "__main__":
     global msg_q
     global exit_event
-#    global debug
     
     print("Initial encoding: ", sys.stdout.encoding)
     sys.stdout.reconfigure(encoding="utf-8")

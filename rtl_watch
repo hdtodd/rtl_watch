@@ -353,8 +353,7 @@ def make_parser():
 def set_params():
     global source, host, topic, username, password, port, debug, debugW
     global dup_thresh, tbl_width, grp_cnt
-    global noTPMS
-    global omitSNR, omitITGT, omitFreq, omitPPT
+    global omitSNR, omitITGT, omitFreq, omitPPT, noTPMS
     
     args = make_parser()
 

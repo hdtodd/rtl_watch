@@ -4,7 +4,8 @@
 `rtl_watch` monitors output from `rtl_433` to display, in real time, the characteristics of the ISM-band devices broadcasting in your neighborhood.
 
 `rtl_watch` can help you understand the ISM environment in your neighborhood by cataloging devices near you that are broadcasting on the ISM band (433MHz in the US).  The values provided by `rtl_watch` for the device signal characteristics over a number of readings may help you identify devices that are close to your location and/or new devices in your neighborhood.
-<img width="1589" alt="rtl_watch-v3-0" src="https://github.com/user-attachments/assets/ac6b40d6-4cc9-421f-96f8-79c65ff4d78e">
+<img width="1604" alt="rtl_watch-v4 0" src="https://github.com/user-attachments/assets/04b0a40e-58a9-4acd-ab86-1c4276a03007">
+
 
 ## Use
 

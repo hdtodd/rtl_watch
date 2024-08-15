@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 # http_rtl
+# hdtodd@gmail.com,2024.08
+
 VERSION="1.0"
 
 """
@@ -22,7 +24,6 @@ AP_EPILOG="""
 import argparse
 import requests
 import json
-#from time import sleep
 import sys
 import os
 import signal
@@ -49,6 +50,7 @@ host  = None
 port  = 8433
 debug = False
 
+# Color-code messages with CSI's
 CSIBLK = "\033[30m"
 CSIRED = "\033[31m"
 CSIYLW = "\033[93m"
@@ -149,7 +151,6 @@ def set_params():
     return
 #  End command-line and parameter-setting functions
 
-
 #############################################################################
 #  Message consumer thread
 
@@ -185,7 +186,6 @@ def process(data):
             label += '\tBattery low!'
 
     print(label)
-
     return
 
 def consumer():
@@ -220,7 +220,7 @@ def consumer():
 
     #  We get here if 'exit_event' has been set; just return and exit thread
     if debug:
-        print("Exiting 'consumer'")
+        print("Message consumer thread exiting")
     return
 
 #############################################################################
@@ -264,7 +264,8 @@ def producer():
     #  Tell the consumer to quit by sending a 'None' message and return
     #    to caller, terminating this thread
     msg_q.put(None)
-    print('\nHTTP message producer thread exiting.')
+    if debug:
+        print('\nHTTP message producer thread exiting.')
     return
 
 #  The main script

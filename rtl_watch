@@ -840,7 +840,7 @@ def mqtt_subscribe(mqtt: mqtt_client):
 #    telling us to exit and close this thread.
 def http_subscribe():
     global debug
-    global msq_queue
+    global msq_q
     global exit_event
     url = f'http://{host}:{port}/stream'
     headers = {'Accept': 'application/json'}

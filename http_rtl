@@ -2,7 +2,7 @@
 # http_rtl
 # hdtodd@gmail.com,2024.08
 
-VERSION="1.0"
+VERSION="1.1"
 
 """
   Custom data handling example for rtl_433's HTTP (line) streaming API of JSON events.
@@ -27,6 +27,7 @@ import json
 import sys
 import os
 import signal
+from time import sleep
 from queue import Queue
 import threading
 from datetime import datetime
@@ -90,12 +91,12 @@ def CnvTime(ts):
 def quit_prog(signum, stack_frame):
     global exit_event
     global debug
+    
     print(CSIGRN, "\n\nWait for data collection to complete ...", CSIBLK)
     if debug:
         print("'exit_event' set in 'quit_prog'")
     exit_event.set()
     msg_q.put(None)
-
     
 #############################################################################
 #  Command-line parsing and parameter-setting functions
@@ -227,38 +228,43 @@ def consumer():
 #  Message producer thread
 #  Listen for streamed http messages until 'exit_event' has been set,
 #    telling us to exit and close this thread.
-def producer():
-    global debug
-    global msq_queue
-    global exit_event
+def stream_lines():
     url = f'http://{host}:{port}/stream'
     headers = {'Accept': 'application/json'}
 
-    # We receive JSON events, one per line terminated with CRLF.
+    # We will receive JSON events, one per line terminated with CRLF.
     # On Events and Stream endpoints a keep-alive of CRLF will be send every 60 seconds.
     response = requests.get(url, headers=headers, timeout=70, stream=True)
     print(CSIGRN, f'Connected to {url}', CSIBLK)
     print(CSIBLU,"ISO Timestamp\t\tEpoch Time\tDevice ID\t\tTemperature\tHumid\tBattery low?", CSIBLK)
 
-    try:
-        # Open the HTTP (line) streaming API of JSON events
-        for line in response.iter_lines():
-            if debug:
-                print(line)
-            line = line.rstrip()
-            if not line:
-                # filter out keep-alive empty lines
-                continue
-            # We have a message.  Queue it for processing
-            msg_q.put(line)
+    for chunk in response.iter_lines():
+        yield chunk
+
+def producer():
+    global debug
+    global msq_queue
+    global exit_event
+
+    while not exit_event.is_set():
+        try:
+            # Open the HTTP (line) streaming API of JSON events
+            for line in stream_lines():
+                if debug:
+                    print(line)
+                line = line.rstrip()
+                if not line:
+                    # filter out keep-alive empty lines
+                    continue
+                # We have a message.  Queue it for processing
+                msg_q.put(line)
+                if exit_event.is_set():
+                    break
+        except requests.ConnectionError:
             if exit_event.is_set():
                 break
-
-    except requests.ConnectionError:
-        print('Connection failed, retrying...')
-        sleep(5)
-        response = requests.get(url, headers=headers, timeout=70, stream=True)
-        print(f'Connected to {url}')
+            print('Connection failed, retrying...')
+            sleep(5)
 
     #  We get here when 'exit_event' has been set externally
     #  Tell the consumer to quit by sending a 'None' message and return
@@ -298,8 +304,9 @@ if __name__ == "__main__":
     p.start()
 
     # We get here when the threads exit and terminate
-    #   Let the threads return to this control program and exit
     c.join()
-    print("Consumer exited")
+    if debug:
+        print("Consumer exited")
     p.join()
-    print("Producer exited")
+    if debug:
+        print("Producer exited")

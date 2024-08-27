@@ -1,6 +1,6 @@
 #! /usr/bin/env python3
 #  rtl_watch
-VERSION="4.0.0"
+VERSION="4.0.1"
 
 #  Python program for real-time monitoring of ISM packets.
 #
@@ -53,6 +53,7 @@ from   paho.mqtt import client as mqtt_client
 import random
 import json
 import time
+from time import sleep
 import datetime
 import math
 from   enum import IntEnum
@@ -838,43 +839,51 @@ def mqtt_subscribe(mqtt: mqtt_client):
 #  Message producer thread for http stream
 #  Listen for streamed http messages until 'exit_event' has been set,
 #    telling us to exit and close this thread.
+def stream_lines():
+    global debug
+    url = f'http://{host}:{port}/stream'
+    headers = {'Accept': 'application/json'}
+
+    # We will receive JSON events, one per line terminated with CRLF.              
+    # On Events and Stream endpoints a keep-alive of CRLF will be send every 60 seconds.
+    response = requests.get(url, headers=headers, timeout=70, stream=True)
+    print(CSIGRN, f'Connected to {url}', CSIBLK)
+    for chunk in response.iter_lines():
+        yield chunk
+
 def http_subscribe():
     global debug
     global msq_q
     global exit_event
-    url = f'http://{host}:{port}/stream'
-    headers = {'Accept': 'application/json'}
 
     # We receive JSON events, one per line terminated with CRLF.
     # On Events and Stream endpoints a keep-alive of CRLF will be send every 60 seconds.
-    response = requests.get(url, headers=headers, timeout=70, stream=True)
-    print(f'Connected to {url}')
 
-    try:
-        # Open the HTTP (line) streaming API of JSON events
-        for line in response.iter_lines():
-            if debug:
-                print(line)
-            line = line.rstrip()
-            if not line:
-                # filter out keep-alive empty lines
-                continue
-            #  We have a message.  Queue the message for processing
-            msg_q.put(line)
+    while not exit_event.is_set():
+        try:
+            for line in stream_lines():
+                if debug:
+                    print(CSIRED,"HTTP received\n\t",line,CSIBLK)
+                line = line.rstrip()
+                if not line:
+                    # filter out keep-alive empty lines
+                    continue
+                #  We have a message.  Queue the message for processing
+                msg_q.put(line)
+                if exit_event.is_set():
+                    break
+        except requests.ConnectionError:
             if exit_event.is_set():
                 break
-
-    except requests.ConnectionError:
-        print('Connection failed, retrying...')
-        sleep(5)
-        response = requests.get(url, headers=headers, timeout=70, stream=True)
-        print(f'Connected to {url}')
+            print("Connection failed, retrying ...")
+            sleep(5)
 
     #  We get here when 'exit_event' has been set externally
     #  Tell the consumer to quit by sending a 'None' message and return
     #    to caller, terminating this thread
     msg_q.put(None)
-    print('\nHTTP message collector exiting.')
+    if debug:
+        print('\nHTTP message collector exiting.')
     return
 
 #######################################################################################

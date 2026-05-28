@@ -1,4 +1,4 @@
-# rtl\_watch: Real-time rtl\_433 monitor v4.0.1
+# rtl\_watch: Real-time rtl\_433 monitor v4.0.2
 ## Catalog and characterize ISM devices using rtl\_433
 
 `rtl_watch` monitors output from `rtl_433` to display, in real time, the characteristics of the ISM-band devices broadcasting in your neighborhood.
@@ -79,14 +79,14 @@ The information from `rtl_watch` can be helpful in several ways to understand yo
 
 ## Installing `rtl_watch`
 
-`rtl_watch` is a Python3 program.  It requires that the Python packages `tkinter` and `paho-mqtt` be installed on the computer on which `rtl_watch` is invoked.  `rtl_watch` has been tested on Mac OSX Catalina and Sonoma and Raspbian Bullseye and Bookworm. On Mac OSX, you may need to install Python3 if you haven't already done so ( <https://www.python.org/downloads/macos/> ).
-
-To install, connect to an appropriate directory for downloading code and issue the command
-   `git clone http://github.com/hdtodd/rtl_watch`
-then `cd rtl_watch` and `./rtl_watch` to run the program.  See below for command-line options.
+`rtl_watch` is a Python3 program.  It requires that the Python packages `tkinter` and `paho-mqtt` be installed on the computer on which `rtl_watch` is invoked.  `rtl_watch` has been tested on Mac OSX Catalina, Sonoma, Sequoia, and Tahoe and on Raspbian Bullseye, Bookworm, and Trixie. On Mac OSX, you may need to install Python3 if you haven't already done so ( <https://www.python.org/downloads/macos/> ).
 
 >[!NOTE]
->Paho-MQTT v2 broke v1 callback invocations, but v3 and subsequent versions of `rtl_watch` incorporate a workaround so that it will operate with either v1.x or v2.x of Paho-MQTT.  However, invocation on a system running v2.x will generate a warning, since `rtl_watch` continues to use the deprecated v1-style callback invocation for now.  `check_paho_vers` is included in this distribution: executing it will tell you which version you're running.
+>This current version of `rtl_watch` requires that you have installed the current version of Paho-MQTT (V2 at this time).  Paho-MQTT V1 broke V1 callback invocations.  `rtl_watch` V4.0.1 incorporated a workaround so that version of `rtl_watch`  will operate with either v1.x or v2.x of Paho-MQTT, and it is archived in this repository.  However, Paho-MQTT V3 is expected to drop support for V1 invocations.  `rtl_watch` V4.0.2 drops support for Paho-MQTT V1 invocations; use `rtl_watch.4.0.1` if you are on a system that does not support Paho-MQTT V2 or later.  You can use `check_paho_vers` from this repository to tell you which version of Paho-MQTT you're running.
+
+To install `rtl_watch`, connect to a directory you use for for downloading code and issue the command
+   `git clone http://github.com/hdtodd/rtl_watch`
+then `cd rtl_watch` and `./rtl_watch` to run the program.  See below for command-line options.
 
 `rtl_watch` requires that a computer (the "monitoring computer") on your local-area network be running `rtl_433` and re-broadcasting the ISM packets it recognizes as JSON messages via either the HTTP or MQTT protocol on the local-area network.  See instructions below if you do not have an `rtl_433` system set up or if it has not been set up to re-broadcast packets via MQTT or HTTP.
 
@@ -190,8 +190,6 @@ The developers of `rtl_433` continually update the list of devices that the prog
  
 ## Known Issues
 
-The current version of Python Paho-MQTT is v2 on MacOS Sonoma with Python v3.12.4, and it is v1.6 on RaspiOS 6.6 Bookworm with Python v3.11.2 as installed with apt-get/pip3.  Paho-MQTT v2 broke the callback invocation for v1.  `rtl_watch` has a workaround (invokes v1 compatibility on a v2 system), but v2 issues a deprecation warning.  `rtl_watch` will be updated to use v2 invocation when the RaspiOS Paho-MQTT library has been updated to v2.
-
 When using HTTP streaming as the connection protocol, there may be a delay between pressing the Quit button and actual termination of the program as threads terminate themselves.
 
 >[!NOTE]
@@ -205,14 +203,16 @@ These related `rtl_433` tools might also be helpful:
 
 ## Release History
 
-*  V1.0: First operational version
-*  V2.0: Extend table contents; revise parameter-entry options
-*  V2.1: Add workaround for paho_mqtt v1/v2 callback incompatibility; finish docs.
-*  V3.0: Add queuing and threads to separate packet collection from processing; correct error in window updating for duplicate packets
-*  V4.0: Add HTTP streaming as an alternative data source instead of MQTT; correct error in handling noTPMS option; add additional filters to ignore packets that can't be cataloged. 
+| Version | Date    | Changes |
+|---------|---------|---------|
+| V4.0.2  | 2026.05 | Update to use Paho-MQTT CallbackAPIVersion 2; leave archival code `rtl_watch.4.0.1` for those who haven't or can't update to an OS that supports Paho-MQTT V2 or later. |
+| V4.0    | 2024.08 | Add HTTP streaming as an alternative data source instead of MQTT; correct error in handling noTPMS option; add additional filters to ignore packets that can't be cataloged. |
+| V3.0    | 2024.08 | Add queuing and threads to separate packet collection from processing; correct error in window updating for duplicate packets. |
+| V2.1    | 2024.07 | Add workaround for paho_mqtt v1/v2 callback incompatibility; finish docs. |
+| V2.0    | 2023.05 | Extend table contents; revise parameter-entry options. |
+| V1.0    | 2023.03 | First operational version. |
+
 
 ## Author
 
-David Todd, hdtodd@gmail.com, v1: 2023.03; v2.0: 2023.05; v2.1 2024.07; v3.0 2024.08; v4.0 2024.08
-
-
+David Todd, hdtodd@gmail.com; <http://github.com/hdtodd/>

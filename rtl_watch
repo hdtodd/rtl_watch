@@ -1,6 +1,6 @@
 #! /usr/bin/env python3
 #  rtl_watch
-VERSION="4.0.1"
+VERSION="4.0.2"
 
 #  Python program for real-time monitoring of ISM packets.
 #
@@ -42,6 +42,7 @@ VERSION="4.0.1"
 #  V3.0.0 modifications 2024.07: use a queue and threads to
 #         catch and records all packets
 #  V4.0.0 Add support for HTTP streaming as the data source
+#  V4.0.2 Implement Paho-MQTT callback V2 protocol
 #
 
 import argparse
@@ -694,22 +695,22 @@ def toggle_fullscreen(event=None):
 # MQTT functions and display updating
 # Connect to  MQTT host
 def connect_mqtt() -> mqtt_client:
-    def on_connect(mqtt, userdata, flags, rc):
-        if rc == 0:
-            print("Connected to MQTT broker host!")
+    def on_connect(mqtt, userdata, flags, reason_code, properties):
+        if reason_code == 0:
+            print("Connected to MQTT broker host " + host)
         else:
-            print("Failed attempt to connect to ", mqtt)
+            print("Failed attempt to connect to ", host)
             print("  with userdata ", userdata)
-            print("Return code %d\n", rc)
+            print("Reason code: {reason_code}\n")
             sys.exit(1)
         return #from on_connect
 
-    # Work around paho-mqtt v1, v2+ Client instantiation parameter diffs
-    #   by invoking v1 compatibility if on a v2 system
+    # Try connecting with Version2 of callback; quit if it fails
     try:
-        mqtt = mqtt_client.Client(client_id, clean_session=False)
+        mqtt = mqtt_client.Client(mqtt_client.CallbackAPIVersion.VERSION2)
     except:
-        mqtt = mqtt_client.Client(mqtt_client.CallbackAPIVersion.VERSION1, client_id, clean_session=False)
+        print("Attempt to use VERSION2 of MQTT callback failed!")
+        sys.exit(1)
     mqtt.username_pw_set(username, password)
     mqtt.on_connect = on_connect
     mqtt.connect(host, port)

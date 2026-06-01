@@ -1092,8 +1092,11 @@ if __name__ == "__main__":
     # This activates the on_message procedure in which
     #   MQTT events cause the displayed values to be updated
     if source==MQTT:
-        mqtt = connect_mqtt()
-
+        try:
+            mqtt = connect_mqtt()
+        except:
+            print("Unable to connect to MQTT host " + host)
+            sys.exit(1)
     if debug:
         print("Entering main run loops")
         print("Start packet processing and collecting threads")

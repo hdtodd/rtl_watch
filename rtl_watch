@@ -710,7 +710,7 @@ def connect_mqtt() -> mqtt_client:
     except:
         print("Attempt to use VERSION2 of MQTT callback failed!")
         print("Check the version number of your installed Paho-MQTT with 'check_paho_version'")
-        print("  or invoke 'rtl_watch.4.0.1' to try to use Pah-MQTT callback V1")
+        print("  or invoke 'rtl_watch.4.0.1' to try to use Paho-MQTT callback V1")
         sys.exit(1)
     mqtt.username_pw_set(username, password)
     mqtt.on_connect = on_connect

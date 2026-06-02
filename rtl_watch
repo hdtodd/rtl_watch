@@ -696,11 +696,11 @@ def toggle_fullscreen(event=None):
 def connect_mqtt() -> mqtt_client:
     def on_connect(mqtt, userdata, flags, reason_code, properties):
         if reason_code == 0:
-            print("Connected to MQTT broker host " + host)
+            print("Connected to MQTT broker host ", host)
         else:
             print("Failed attempt to connect to ", host)
             print("  with userdata ", userdata)
-            print("Reason code: {reason_code}\n")
+            print("Reason code:", reason_code)
             sys.exit(1)
         return #from on_connect
 

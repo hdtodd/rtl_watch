@@ -195,7 +195,7 @@ When using HTTP streaming as the connection protocol, there may be a delay betwe
 >[!NOTE]
 >`rtl_watch` uses message queuing between process threads to buffer message processing and window updating from packet collection.  It has not been tested on  a single-core system in a high-traffic location and may not be able to respond well in that environment.  If you notice problems, please report them to the author with details about the system on which you're running `rtl_watch`.
 
-The "QUIT" button in the display window works as expected, but CNTL-C from the controling terminal generates error warnings related to incorrect thread terminations.
+The "QUIT" button in the display window works as expected, but CNTL-C from the controling terminal occasionally generates error warnings related to incorrect thread terminations.
 
 ## Related Tools
 These related `rtl_433` tools might also be helpful:

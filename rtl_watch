@@ -409,6 +409,7 @@ def set_params():
 
     #  username and password may not be required, so don't prompt
     #    if not already provided; and port just defaults in parser
+    #  Cmd-line arg overrides ENVT variable overrides def in code preamble
     #4.0.3
     if "MQTT_USERNAME" in os.environ:
         username = os.environ["MQTT_USERNAME"]
@@ -416,14 +417,12 @@ def set_params():
         username = args.username
 
     if "MQTT_PASSWORD" in os.environ:
-        args.password = os.environ["MQTT_PASSWORD"]
+        password = os.environ["MQTT_PASSWORD"]
     if args.password:
         password = args.password
 
     host     = args.host
     topic    = args.topic
-    username = args.username
-    password = args.password
     port     = args.port
     debug    = args.debug
     debugW   = args.debug and args.warn
@@ -716,7 +715,9 @@ def connect_mqtt() -> mqtt_client:
         print("Check the version number of your installed Paho-MQTT with 'check_paho_version'")
         print("  or invoke 'rtl_watch.4.0.1' to try to use Paho-MQTT callback V1")
         sys.exit(1)
-    mqtt.username_pw_set(username, password)
+    #4.0.3 Set MQTT u/p only if provided by cmdline, envt, or code preamble
+    if username:
+        mqtt.username_pw_set(username, password)
     mqtt.on_connect = on_connect
     mqtt.connect(host, port)
     return mqtt #from connect_mqtt()

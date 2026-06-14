@@ -316,6 +316,8 @@ class DoubleScrolledFrame:
 # Command-line and parameter-setting function
 # Create the parser 
 def make_parser():
+    #4.0.3
+    global username, password
     parser = argparse.ArgumentParser(
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description=AP_DESCRIPTION, epilog=AP_EPILOG)
@@ -407,15 +409,16 @@ def set_params():
 
     #  username and password may not be required, so don't prompt
     #    if not already provided; and port just defaults in parser
-    if not args.username and "MQTT_USERNAME" in os.environ:
-        args.username = os.environ["MQTT_USERNAME"]
-    else:
-        args.username = ""
+    #4.0.3
+    if "MQTT_USERNAME" in os.environ:
+        username = os.environ["MQTT_USERNAME"]
+    if args.username:
+        username = args.username
 
-    if not args.password and "MQTT_PASSWORD" in os.environ:
+    if "MQTT_PASSWORD" in os.environ:
         args.password = os.environ["MQTT_PASSWORD"]
-    else:
-        args.password = ""
+    if args.password:
+        password = args.password
 
     host     = args.host
     topic    = args.topic
@@ -694,6 +697,7 @@ def toggle_fullscreen(event=None):
 # MQTT functions and display updating
 # Connect to  MQTT host
 def connect_mqtt() -> mqtt_client:
+    global username, password
     def on_connect(mqtt, userdata, flags, reason_code, properties):
         if reason_code == 0:
             print("Connected to MQTT broker host ", host)

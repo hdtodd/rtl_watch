@@ -1,4 +1,4 @@
-# rtl\_watch: Real-time rtl\_433 monitor v4.0.2
+# rtl\_watch: Real-time rtl\_433 monitor v4.0.3
 ## Catalog and characterize ISM devices using rtl\_433
 
 `rtl_watch` monitors output from `rtl_433` to display, in real time, the characteristics of the ISM-band devices broadcasting in your neighborhood.
@@ -207,6 +207,7 @@ These related `rtl_433` tools might also be helpful:
 
 | Version | Date    | Changes |
 |---------|---------|---------|
+| V4.0.3  | 2026.06 | Correct the processing of MQTT username and password in 'set_params()' for secured MQTT brokers |
 | V4.0.2  | 2026.05 | Update to use Paho-MQTT CallbackAPIVersion 2; leave archival code `rtl_watch.4.0.1` for those who haven't or can't update to an OS that supports Paho-MQTT V2 or later. |
 | V4.0    | 2024.08 | Add HTTP streaming as an alternative data source instead of MQTT; correct error in handling noTPMS option; add additional filters to ignore packets that can't be cataloged. |
 | V3.0    | 2024.08 | Add queuing and threads to separate packet collection from processing; correct error in window updating for duplicate packets. |

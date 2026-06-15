@@ -37,9 +37,12 @@ This section is the table of characteristics of the signals observed from each d
 1. the count of packets observed from each device;
 1. the count of transmissions (de-duplicated packets) observed from each device;
 1. the mean and standard deviation of the signal-to-noise ratio (SNR) of the transmissions observed from each device, as reported by `rtl_433`;
-1. the mean and standard deviation of the frequencies of the transmissions observed from each device, as reported by `rtl_433`;
+1. the mean and standard deviation of the frequencies of the transmissions observed from each device, as reported by `rtl_433`; 
 1. the mean and standard deviation of the inter-transmission gap times (ITGT) between transmissions from each device;
 1. the mean and standard deviation of the number of packets per transmission (PPT) from each device.
+
+>[!NOTE]
+>The frequency reported is that associated with the JSON field "freq".  For devices that report more than one frequency, the field labeled "freq1" is used.
 
 >[!NOTE]
 >ITGT and PPT statistics *lag one transmission behind readings*, since the end of the past transmission isn't recognized until a new one begins.
@@ -207,6 +210,7 @@ These related `rtl_433` tools might also be helpful:
 
 | Version | Date    | Changes |
 |---------|---------|---------|
+| V4.0.4  | 2026.06 | For devices reporting multiple frequencies that don't present a field labeled "freq", use the value associated with "freq1" as the frequency value. |
 | V4.0.3  | 2026.06 | Correct the processing of MQTT username and password in 'set_params()' for secured MQTT brokers |
 | V4.0.2  | 2026.05 | Update to use Paho-MQTT CallbackAPIVersion 2; leave archival code `rtl_watch.4.0.1` for those who haven't or can't update to an OS that supports Paho-MQTT V2 or later. |
 | V4.0    | 2024.08 | Add HTTP streaming as an alternative data source instead of MQTT; correct error in handling noTPMS option; add additional filters to ignore packets that can't be cataloged. |

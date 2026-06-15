@@ -1,0 +1,227 @@
+#!/usr/bin/env python3
+# mqTest
+# Use this to confirm that this installation is receiving
+#   rtl_433 JSON packets published by the monitoring
+#   system's rtl_433/mqtt broker service
+
+import os
+import sys
+import signal
+import argparse
+import random
+import json
+import time
+import paho.mqtt
+
+from paho.mqtt import client as mqtt_client
+
+AP_DESCRIPTION="""
+mqTest:  Verify MQTT parameters for connecting to rtl_433 MQTT broker
+         to prepare for DNT to display neighborhood thermometers
+         Usually, this test will work with the simple command:
+              ./mqTest -H <your rtl_433 host\'s name>
+         Temperature defaults to Fahrenheit.
+         To see parameters applied during execution, append \'-d\'
+"""
+
+AP_EPILOG="""
+MQTT parameters can be supplied by command line, environment, or editing source code.
+Only the host (\"broker\") must be specified if other rtl_433 configuration parameters
+were not modified.  Topic defaults to \"rtl_433/+/events" and port defaults to 1883.
+Unless the MQTT broker was secured, username and password are not needed and default to blank
+
+"""
+
+#########################################################################################
+#  Global variable initialization
+
+#  MQTT connection management
+#  Parameters used to establish the mqtt connection to the rtl_433 receiver mqtt publisher
+broker = None
+topic = "rtl_433/+/events"
+port = 1883
+username = ""
+password = ""
+client_id = f'python-mqtt-{random.randint(0, 100)}'
+
+#  By default, use Fahrenheit scale for display
+useF=True
+## *** END MODIFY LOCAL PARAMETERS ***
+
+ 
+#########################################################################################
+# CNTL-C handler
+def handler(signum, frame):
+    print()
+    sys.exit(0)
+ 
+
+#########################################################################################
+#  Create the command parser, parse cmd line, and set defaults
+def make_parser():
+    #3.0.3
+    global username, password
+    parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
+                                     description=AP_DESCRIPTION,
+                                     epilog=AP_EPILOG)
+    parser.add_argument("-H", "--host", dest="host", type=str, default=broker,
+                        help="MQTT hostname to connect to (default: %(default)s)")
+    parser.add_argument("-T", "--topic", dest="topic",type=str, default=topic,
+                        help="rtl_433 MQTT event topic to subscribe to (default: %(default)s)")
+    specifyTemp = parser.add_mutually_exclusive_group()
+    specifyTemp.add_argument("-C", "--Celsius", dest="degC", action="store_true",
+                             default=False,
+                             help="Display temperatures in Celsius (default is Fahrenheit)")
+    specifyTemp.add_argument("-F", "--Fahrenheit", dest="degC", action="store_false",
+                             default=True,
+                             help="Display temperatures in Fahrenheit (default)")
+    parser.add_argument("-U", "--username", type=str, default=username,
+                        help="MQTT username, if needed; defaults to blank")
+    parser.add_argument("-P", "--password", type=str, default=password,
+                        help="MQTT password, if needed; defaults to blank")
+    parser.add_argument("-p", "--port", type=int, default=port,
+                        help="MQTT port (default: %(default)s)")
+    parser.add_argument("-d", "--debug", dest="debug", action="store_true")
+#    parser.add_argument("fn")
+#    parser.add_argument("-T", "--include_TPMS", action='store_true',
+#                        dest="TPMS",
+#                        help="include tire pressure monitors in catalog")
+#    parser.add_argument("-o", "--omit", choices=["SNR", "ITGT", "Freq"],
+#                        nargs="+")
+
+    args = parser.parse_args()
+    return (args)
+
+thresh = 2.0
+lastEntry = {"time":0.0, "model":"", "id":0}
+
+def connect_mqtt() -> mqtt_client:
+    def on_connect(client, userdata, flags, reason_code, properties):
+        if reason_code == 0:
+            print("Connected to MQTT broker host ", broker)
+        else:
+            print("Failed attempt to connect to ", broker)
+            print("  with userdata ", userdata)
+            print("Reason code:", reason_code)
+            sys.exit(1)
+        return #from on_connect
+
+    # Try connecting with Version2 of callback; quit if it fails
+    try:
+        client = mqtt_client.Client(mqtt_client.CallbackAPIVersion.VERSION2)
+    except:
+        print("Attempt to use VERSION2 of MQTT callback failed!")
+        print("Check the version number of your installed Paho-MQTT with 'check_paho_version'")
+        print("  or invoke 'DNT.3.0.1' to try to use Paho-MQTT callback V1")
+        sys.exit(1)
+    #3.0.3
+    if username:
+        client.username_pw_set(username, password)
+    client.on_connect = on_connect
+    client.connect(broker, port)
+    return client
+
+
+def subscribe(client: mqtt_client):
+    def on_message(client, userdata, msg):
+        y = json.loads(msg.payload.decode())
+        # If not a device record, just return
+        if not "model" in y:
+            return
+
+        #  Statements below make 'model'/'channel'/'id' the key for identifying
+        dev = y["model"] + "/"
+        if "channel" in y:
+            dev += str(y["channel"])
+        dev += "/"
+        if "id" in y:
+            dev += str(y["id"])
+
+        # if this is a themometer reading, process it; otherwise just return
+        if "temperature_C" in y.keys():
+            ltemp = y["temperature_C"]
+            if useF:
+                ltemp = ltemp*9.0/5.0+32.0
+        else:
+            if "temperature_F" in y.keys():
+                ltemp = y["temperature_F"]
+                if not useF:
+                    ltemp = (ltemp-32.0)*5.0/9.0
+
+        if "temperature_C" in y.keys() or "temperature_F" in y.keys():
+            eTime = time.mktime(time.strptime(y["time"], "%Y-%m-%d %H:%M:%S"))
+            if eTime>lastEntry["time"]+thresh or dev!=lastEntry["dev"]:
+                print("{:<20} {:<30} {:>6.1f}{:<2}".format(y["time"], dev,
+                      round(ltemp,1), "°F" if useF else "°C"))
+                lastEntry["time"] = eTime
+                lastEntry["dev"] = dev
+        else:
+            print("--- NOT A THERMOMETER ---")
+            print(y)
+            print("-------------------------")
+                  
+    client.subscribe(topic)
+    client.on_message = on_message
+
+
+def run():
+    client = connect_mqtt()
+    subscribe(client)
+    client.loop_forever()
+
+def stop():
+    client.loop_stop()
+    quit()
+    
+#########################################################################################
+#  Main program 
+
+signal.signal(signal.SIGINT, handler)
+args = make_parser()
+
+#  We need host and topic, so if not already provided by
+#    cmdline, env, or embedded source code, then ask for them
+if not args.host:
+    if "MQTT_HOST" in os.environ:
+        args.host = os.environ["MQTT_HOST"]
+    else:
+        if broker == None:
+            args.host = input("MQTT host name or IP: ")
+
+if not args.topic:
+    if "MQTT_TOPIC" in os.environ:
+        args.topic = os.environ["MQTT_TOPIC"]
+    else:
+        if topic == None:
+            args.topic = input("MQTT topic: ")
+
+#  username and password not required, so don't prompt if not already provided
+#    and port just defaults
+if not args.username and 'MQTT_USERNAME' in os.environ:
+    args.username = os.environ['MQTT_USERNAME']
+else:
+    args.username = ""
+    
+if not args.password and 'MQTT_PASSWORD' in os.environ:
+    args.password = os.environ['MQTT_PASSWORD']
+else:
+    args.password = ""
+
+useF     = False if args.degC!=None and args.degC else True
+broker   = args.host
+topic    = args.topic
+username = args.username
+password = args.password
+port     = args.port
+
+print("Debug is ", "ON" if not args.debug==None and args.debug else "OFF")
+if args.debug:
+    print("Parameter settings in execution are ...")
+    print("\tMQTT host:    ", broker)
+    print("\tMQTT topic:   ", topic)
+    print("\tMQTT username:", username)
+    print("\tMQTT password:", password)
+    print("\tMQTT port:    ", port)
+    print("\tUseF:         ", useF)
+    
+run()
